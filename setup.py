@@ -6,7 +6,7 @@ here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
 # REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! 
-repo_name = ""
+repo_name = "tomo2seg"
 
 setup(
     name=repo_name,
@@ -14,7 +14,7 @@ setup(
     description="A short description.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/joaopcbertoldo/{}".,format(repo_name),
+    url="https://github.com/joaopcbertoldo/{}".format(repo_name),
     author="Joao P C Bertoldo",
     author_email="joaopcbertoldo@gmail.com",
     classifiers=[],
@@ -22,6 +22,7 @@ setup(
     packages=find_packages(where=repo_name),
     python_requires="==3.6.8",
     install_requires=[
+	"numpy==1.18.5",  # it must be < 1.19.0 because of an incompatibility with tensorflow
         "scikit-learn>=0.23.2",
         "pandas>=1.1.0",
         "jupyterlab>=2.2.4",
@@ -29,6 +30,12 @@ setup(
         "matplotlib>=3.3.0",
         "seaborn>=0.10.1",
         "tensorflow>=2.3.1",
+        "pymicro==0.4.5",
+        "tensorboard==2.3.0",
+        "wandb==0.10.2",
+        "scipy== 1.5.2",
+        "streamlit==0.67.1",
+	"Keras==2.4.3",
     ],
     extras_require={
         "dev": [
