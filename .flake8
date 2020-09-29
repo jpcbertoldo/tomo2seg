@@ -1,0 +1,14 @@
+[flake8]
+max-complexity = 10
+max-line-length = 88
+select = C,E,F,W,B,B950
+ignore =
+       # Use bugbear line length detection instead of default
+       E501,
+       # PEP8 allows hanging indent, but E126 dosn't seem to.
+       E126,
+       W503,
+
+# Local Variables:
+# mode: conf
+# End:
