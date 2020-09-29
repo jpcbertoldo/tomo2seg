@@ -22,7 +22,7 @@ in this directory. Otherwise, just make sure that you have `Python 3.6.5` and us
 ```bash
 virtualenv -p python3 .venv
 source .activate  # or source .venv/bin/activate if you will
-pip install .
+pip install .[dev]
 pip freeze > requirements.txt
 ```
 
