@@ -1,0 +1,3 @@
+[submodule "cnn_segm"]
+	path = cnn_segm
+	url = ./cnn_segm

@@ -133,4 +133,3 @@ data/*
 !data/.gitignore
 
 .idea/
-cnn_segm/
