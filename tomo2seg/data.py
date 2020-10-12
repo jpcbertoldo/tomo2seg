@@ -9,6 +9,9 @@ root_dir = (here / "..").resolve()
 data_dir = (root_dir / "data").resolve()
 models_dir = (root_dir / "models").resolve()
 
+data_dir.mkdir(exist_ok=True)
+models_dir.mkdir(exist_ok=True)
+
 
 class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
     def train_data_path(self) -> Path:
