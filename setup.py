@@ -39,7 +39,7 @@ setup(
         "tensorflow==2.3.1",
         "pymicro==0.4.5",
         "tensorboard==2.3.0",
-        "wandb==0.10.2",
+        #"wandb==0.10.2",  # i cannot install this because it depends on psutil, which can only be installed with python3-devel, which i cannot install without sudo...
         "scipy== 1.5.2",
         "streamlit==0.67.1",
         "Keras==2.4.3",
