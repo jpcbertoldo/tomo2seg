@@ -10,4 +10,6 @@ dependencies:
   - matplotlib
   - seaborn
   - imageio
+  - pydot
+  - graphviz
 prefix: /home/users/jcasagrande/projects/tomo2seg/condaenv
