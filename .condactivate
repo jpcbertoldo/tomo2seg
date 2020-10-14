@@ -1,0 +1,5 @@
+
+module load anaconda/conda3.7
+conda activate ./condaenv
+#source ~/.zshrc  # update prompt
+

@@ -1,3 +1,5 @@
+raise EnvironmentError("The setup.py has been deprecated because using pipy's distribution of tensorflow-gpu seems not to work properly. Use the conda environment.")
+
 import pathlib
 
 from setuptools import find_packages, setup
@@ -5,7 +7,6 @@ from setuptools import find_packages, setup
 here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
-# REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! REPLACE ME! 
 repo_name = "tomo2seg"
 
 cnn_segm_path = str((here / "cnn_segm").absolute())
@@ -28,6 +29,7 @@ setup(
     packages=find_packages(where=repo_name) + cnn_segm_packages,
     python_requires=">=3.6.8",
     install_requires=[
+	# todo update versions with those from conda?
         "numpy==1.18.5",  # it must be < 1.19.0 because of an incompatibility with tensorflow
         "scikit-learn==0.23.2",
         "scikit-image==0.17.2",
@@ -36,7 +38,7 @@ setup(
         "jupyter_contrib_nbextensions==0.5.1",
         "matplotlib==3.3.0",
         "seaborn==0.10.1",
-        "tensorflow==2.3.1",
+        "tensorflow==2.3.1",  # install tensorflow-gpu instead!
         "pymicro==0.4.5",
         "tensorboard==2.3.0",
         #"wandb==0.10.2",  # i cannot install this because it depends on psutil, which can only be installed with python3-devel, which i cannot install without sudo...
@@ -46,6 +48,7 @@ setup(
         "imageio==2.5.0",
         "opencv-python==4.1.0.25",
         "pytest==5.4.1",
+        "humanize==3.0.1",
     ],
     extras_require={
         "dev": [

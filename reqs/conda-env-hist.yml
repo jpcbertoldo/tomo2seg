@@ -1,0 +1,12 @@
+name: /home/users/jcasagrande/projects/tomo2seg/condaenv
+channels:
+  - defaults
+dependencies:
+  - tensorflow-gpu
+  - jupyterlab
+  - pyyaml
+  - humanize
+  - pandas
+  - matplotlib
+  - seaborn
+prefix: /home/users/jcasagrande/projects/tomo2seg/condaenv
