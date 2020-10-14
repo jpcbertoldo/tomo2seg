@@ -9,4 +9,5 @@ dependencies:
   - pandas
   - matplotlib
   - seaborn
+  - imageio
 prefix: /home/users/jcasagrande/projects/tomo2seg/condaenv

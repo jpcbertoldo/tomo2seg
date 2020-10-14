@@ -51,6 +51,7 @@ dependencies:
   - humanize=3.0.1=py_0
   - icu=58.2=he6710b0_3
   - idna=2.10=py_0
+  - imageio=2.9.0=py_0
   - importlib-metadata=2.0.0=py_1
   - importlib_metadata=2.0.0=1
   - intel-openmp=2020.2=254
@@ -185,6 +186,7 @@ dependencies:
     - pathtools==0.1.2
     - pyarrow==1.0.1
     - pydeck==0.5.0b1
+    - pymicro==0.4.5
     - s3transfer==0.3.3
     - streamlit==0.68.1
     - toml==0.10.1
