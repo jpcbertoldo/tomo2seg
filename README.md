@@ -2,36 +2,19 @@
 
 ## Installation
 
-### Python distrib
+### Conda environment
 
-If you use [`pyenv`](https://github.com/pyenv/pyenv), make sure you:
+Use `anaconda/conda3.7`.
 
-see
+Clone the environ the file `reqs/condaor `reqs/conda-env-hist.yml`.
 
-https://github.com/pyenv/pyenv-installer
+Then *add this package locally* to your envconda`nt: conda develop .` ( with the terminal in the root of the project).
 
-```bash
-pyenv install 3.6.8
-pyenv local 3.6.8
-```
-
-in this directory. Otherwise, just make sure that you have `Python 3.6.5` and use it when creating the virtual environment (the argument right after `-p` should be the path to the right python executable).
-
-### Virtual environment
-
-```bash
-virtualenv -p python3 .venv
-source .activate  # or source .venv/bin/activate if you will
-pip install .[dev]
-pip freeze > requirements.txt
-```
+[todo] test the env reproduction and add comm lines here.
 
 ### Data
 
 everything is ignored
-
-<!-- Everything inside the directory `data` is tracked using [Git LFS](https://git-lfs.github.com/). You need to install this extension to sync it down.
- -->
 
 ## Folders
 
@@ -42,6 +25,8 @@ everything is ignored
 - `scripts`
 
 - `jobs`
+
+- `reqs`
 
 Have fun (:
 
