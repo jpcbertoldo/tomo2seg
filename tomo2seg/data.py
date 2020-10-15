@@ -81,3 +81,6 @@ class ModelPaths(namedtuple("ModelPaths", ["model_name"])):
     def architecture_plot_path(self) -> Path:
         return self.model_path / "architecture.png"
 
+    @property
+    def metadata_yml_path(self) -> Path:
+        return self.model_path / "metadata.yml"

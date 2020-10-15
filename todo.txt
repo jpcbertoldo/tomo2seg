@@ -1,0 +1,2 @@
+* implement pixel-wise weighted cross entropy loss
+
