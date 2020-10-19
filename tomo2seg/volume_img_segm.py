@@ -44,6 +44,7 @@ GEOM_TRANSF.update({
     GT.flip_horizontal__flip_vertical: lambda x: GEOM_TRANSF[GT.flip_vertical](GEOM_TRANSF[GT.flip_horizontal](x)),
     GT.flip_vertical__rotation90: lambda x: GEOM_TRANSF[GT.rotation90](GEOM_TRANSF[GT.flip_vertical](x))
 })
+GEOM_TRANSF = {geo_transf.value: func for geo_transf, func in GEOM_TRANSF.items()}
 
 
 class _Corner(Enum):
@@ -124,19 +125,19 @@ def _generate_one_slice(
     x_start, x_end = (
         (0, crop_size)
         if slice_param.corner in (_Corner.BL, _Corner.UL) else
-        (data_im.shape[0] - crop_size, data_im.shape[0])
+        (- crop_size, data_im.shape[0])
     )
     y_start, y_end = (
         (0, crop_size)
-        if slice_param.corner in (_Corner.UL, _Corner.UL) else
-        (data_im.shape[1] - crop_size, data_im.shape[1])
+        if slice_param.corner in (_Corner.UL, _Corner.UR) else
+        (-crop_size, data_im.shape[1])
     )
 
     data_im = np.copy(data_im[x_start:x_end, y_start:y_end])
     labels_im = np.copy(labels_im[x_start:x_end, y_start:y_end])
 
     # 3: apply augmentation
-    transformation = GEOM_TRANSF[slice_param.geometric_transformation]
+    transformation = GEOM_TRANSF[slice_param.geometric_transformation.value]
     data_im = transformation(data_im)
     labels_im = transformation(labels_im)
 
@@ -232,7 +233,7 @@ class VolumeImgSegmSequence(Sequence):
             _SliceParams(ax, coord, corn, geo_transf)
             for ax in self.axes
             for coord in range(self.shape[ax])
-            for corn in _Corner
+            for corn in list(_Corner)
             # select a number of random geometric augmentations, or None, or all
             for geo_transf in _get_random_transformations(
                 n=self.n_geometric_augmentations, random_state=self.random_state

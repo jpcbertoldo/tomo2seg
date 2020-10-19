@@ -45,6 +45,7 @@ def generic_unet_block(name, nb_filters_1, nb_filters_2, kernel_size, res, batch
         if res:
             # todo check if this layer should have a batchnorm
             skip = conv_layer(nb_filters_2, kernel_size, padding="same", name=f"{name}-conv-skip")(skip)
+            # add batchnorm
             x = add([x, skip])
 
         x = Activation("relu")(x)
@@ -113,7 +114,7 @@ def u_net(
         res=True,
         batch_norm=True,
         dropout=0.03,
-        separable_conv=True,
+        separable_conv=True,   # todo start with false
     )
     unet_down = functools.partial(
         generic_unet_down,
