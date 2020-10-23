@@ -25,10 +25,11 @@ def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray =
     yz_axis.imshow(volume[yz_x_coord, :, :], cmap=cm.gray, interpolation=None)
     xz_axis.imshow(volume[:, xz_y_coord, :], cmap=cm.gray, interpolation=None)
 
-    volume_masked = np.ma.masked_where(labels_mask, volume)
-    xy_axis.imshow(volume_masked[:, :, xy_z_coord], cmap=cm.inferno, interpolation=None, alpha=0.5)
-    yz_axis.imshow(volume_masked[yz_x_coord, :, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
-    xz_axis.imshow(volume_masked[:, xz_y_coord, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
+    if labels_mask is not None:
+        volume_masked = np.ma.masked_where(labels_mask, volume)
+        xy_axis.imshow(volume_masked[:, :, xy_z_coord], cmap=cm.inferno, interpolation=None, alpha=0.5)
+        yz_axis.imshow(volume_masked[yz_x_coord, :, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
+        xz_axis.imshow(volume_masked[:, xz_y_coord, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
 
     xy_axis.set_title(f"XY :: z={xy_z_coord}")
     yz_axis.set_title(f"YZ :: x={yz_x_coord}")
@@ -37,6 +38,17 @@ def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray =
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
     # todo generalize this so that I can plot slices from any coordinates --> pick randomly in usage
+
+
+def show_slice(ax: Axes, slice_: ndarray, labels_mask: ndarray = None):
+
+    if labels_mask is not None:
+        assert slice_.shape == labels_mask.shape
+
+    ax.imshow(slice_, cmap=cm.gray, interpolation=None)
+    if labels_mask is not None:
+        slice_masked = np.ma.masked_where(labels_mask, slice_)
+        ax.imshow(slice_masked, cmap=cm.inferno, interpolation=None, alpha=0.5)
 
 
 def display_training_curves(training, validation, title, subplot, x=None):
