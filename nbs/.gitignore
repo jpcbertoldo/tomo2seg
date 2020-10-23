@@ -1,4 +1,5 @@
 # some times it's easier to just dump stuff here instead of
 # properly moving data to the data directory (:
 *.npy
-*pkl
+*.pkl
+*.png
