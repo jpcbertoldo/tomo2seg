@@ -37,3 +37,19 @@ def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray =
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
     # todo generalize this so that I can plot slices from any coordinates --> pick randomly in usage
+
+
+def display_training_curves(training, validation, title, subplot, x=None):
+    ax = plt.subplot(subplot)
+    if x is None:
+        ax.plot(training)
+        ax.plot(validation)
+    else:
+        # todo clean up this function
+        ax.plot(x, training)
+        ax.plot(x, validation)
+    ax.set_title('model '+ title)
+    ax.set_ylabel(title)
+    ax.set_xlabel('epoch')
+    ax.legend(['training', 'validation'])
+

@@ -192,6 +192,7 @@ class VolumeImgSegmSequence(Sequence):
         n_geometric_augmentations: int = 0,
         random_state: int = 42,
         crop_size: int = 224,
+        force_shorter_epoch: Optional[int] = None  # todo assert, doc, and add a warning for this
     ):
         """
         Args:
@@ -224,6 +225,7 @@ class VolumeImgSegmSequence(Sequence):
         self.n_geometric_augmentations = len(GEOM_TRANSF) if n_geometric_augmentations == -1 else min(n_geometric_augmentations, len(GEOM_TRANSF))
         self.random_state: RandomState = RandomState(seed=random_state)
         self.crop_size = crop_size
+        self.force_shorter_epoch = force_shorter_epoch
 
         self.shape = self.source_volume.shape
 
@@ -249,6 +251,8 @@ class VolumeImgSegmSequence(Sequence):
 
     def __len__(self):
         """Number of batches per epoch"""
+        if self.force_shorter_epoch is not None:
+            return self.force_shorter_epoch
         return int(np.floor(len(self.ids) / self.batch_size))
 
     def __getitem__(self, index):

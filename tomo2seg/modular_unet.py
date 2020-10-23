@@ -150,45 +150,6 @@ def u_net(
         x = concatenate([x_skip, x], axis=3)
         x = unet_block(f"decoder-block-{i}", nb_filters_conv, nb_filters_conv)(x)
 
-    """
-    nb_filters_1 = nb_filters_0 * 2
-    x1 = unet_block("conv1", nb_filters_0, nb_filters_1)(x0)
-
-    x2 = unet_down(nb_filters_1)(x1)
-
-    nb_filters_2 = nb_filters_0 * 4
-    x2 = unet_block("conv2", nb_filters_1, nb_filters_2)(x2)
-
-    x3 = unet_down(nb_filters_2)(x2)
-
-    nb_filters_3 = nb_filters_0 * 8
-    x3 = unet_block("conv3", nb_filters_2, nb_filters_3)(x3)
-
-    x4 = unet_down(nb_filters_3)(x3)
-
-    nb_filters_4 = nb_filters_0 * 16
-    x4 = unet_block("conv4", nb_filters_3, nb_filters_4)(x4)
-
-    x5 = unet_down(nb_filters_4)(x4)
-
-    nb_filters_5 = nb_filters_0 * 32
-    x5 = unet_block("conv5", nb_filters_4, nb_filters_5)(x5)
-    x6 = unet_up(nb_filters_5)(x5)
-    x6 = concatenate([x6, x4], axis=3)
-    x6 = unet_block("conv6", nb_filters_4, nb_filters_4)(x6)
-
-    x7 = unet_up(nb_filters_4)(x6)
-    x7 = concatenate([x7, x3], axis=3)
-    x7 = unet_block("conv7", nb_filters_3, nb_filters_3)(x7)
-
-    x8 = unet_up(nb_filters_3)(x7)
-    x8 = concatenate([x8, x2], axis=3)
-    x8 = unet_block("conv8", nb_filters_2, nb_filters_2)(x8)
-
-    x9 = unet_up(nb_filters_2)(x8)
-    x9 = concatenate([x9, x1], axis=3)
-    x9 = unet_block("conv9", nb_filters_1, nb_filters_1)(x9)"""
-
     # x = GaussianNoise(sigma_noise)(x)
 
     x = Conv2D(output_channels, 1, activation="softmax", name="out")(x)
