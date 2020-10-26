@@ -10,7 +10,9 @@ def tight_subplots(n: int, m: int, w: float, h: float) -> (Figure, Axes):
     return fig, axs
 
 
-def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray = None):
+def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray = None, normalized_voxels=False):
+
+    vmin, vmax = (0, 1) if normalized_voxels else (0, 255)
 
     if labels_mask is not None:
         assert volume.shape == labels_mask.shape
@@ -21,9 +23,9 @@ def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray =
     (height, width, depth) = volume.shape
     xy_z_coord, yz_x_coord, xz_y_coord = int(depth // 2), int(width // 2), int(height // 2)
 
-    xy_axis.imshow(volume[:, :, xy_z_coord], cmap=cm.gray, interpolation=None)
-    yz_axis.imshow(volume[yz_x_coord, :, :], cmap=cm.gray, interpolation=None)
-    xz_axis.imshow(volume[:, xz_y_coord, :], cmap=cm.gray, interpolation=None)
+    xy_axis.imshow(volume[:, :, xy_z_coord], vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    yz_axis.imshow(volume[yz_x_coord, :, :], vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    xz_axis.imshow(np.rot90(volume[:, xz_y_coord, :]), vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
 
     if labels_mask is not None:
         volume_masked = np.ma.masked_where(labels_mask, volume)
