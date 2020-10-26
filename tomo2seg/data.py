@@ -1,6 +1,7 @@
 from collections import namedtuple
 import pathlib
 from pathlib import Path
+from typing import List
 
 from .logger import logger
 
@@ -68,7 +69,7 @@ class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
         vol_paths: "VolumePaths" = cls(volume_name=volume_name)
 
         # the minimal files required
-        error_paths = [
+        error_paths: List[Path] = [
             # train
             vol_paths.train_data_path,
             vol_paths.train_labels_path,
@@ -81,7 +82,7 @@ class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
         ]
 
         # these are not essential but important
-        warning_paths = [
+        warning_paths: List[Path] = [
             # train
             vol_paths.train_weights_path,
 
@@ -96,10 +97,12 @@ class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
         ]
 
         for p in error_paths:
-            logger.error("Missing file: %s", str(p))
+            if not p.exists():
+                logger.error("Missing file: %s", str(p))
 
         for p in warning_paths:
-            logger.warning("Missing file: %s", str(p))
+            if not p.exists():
+                logger.warning("Missing file: %s", str(p))
 
 
 # VOLUME NAMES
