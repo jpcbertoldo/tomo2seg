@@ -104,6 +104,8 @@ class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
             if not p.exists():
                 logger.warning("Missing file: %s", str(p))
 
+        return vol_paths
+
 
 # VOLUME NAMES
 
