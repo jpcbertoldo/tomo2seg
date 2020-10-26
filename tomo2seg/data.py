@@ -47,12 +47,68 @@ class VolumePaths(namedtuple("VolumePaths", ["volume_name"])):
     def val_weights_path(self) -> Path:
         return data_dir / f"val.weights.{self.volume_name}.raw"
 
-    # todo check missing files?
+    @property
+    def test_data_path(self) -> Path:
+        return data_dir / f"test.{self.volume_name}.raw"
+
+    @property
+    def test_info_path(self) -> Path:
+        return data_dir / f"test.{self.volume_name}.raw.info"
+
+    @property
+    def test_labels_path(self) -> Path:
+        return data_dir / f"test.labels.{self.volume_name}.raw"
+
+    @property
+    def test_weights_path(self) -> Path:
+        return data_dir / f"test.weights.{self.volume_name}.raw"
+
+    @classmethod
+    def with_check(cls, volume_name):
+        vol_paths: "VolumePaths" = cls(volume_name=volume_name)
+
+        # the minimal files required
+        error_paths = [
+            # train
+            vol_paths.train_data_path,
+            vol_paths.train_labels_path,
+            vol_paths.train_info_path,
+
+            # validation
+            vol_paths.val_data_path,
+            vol_paths.val_labels_path,
+            vol_paths.val_info_path,
+        ]
+
+        # these are not essential but important
+        warning_paths = [
+            # train
+            vol_paths.train_weights_path,
+
+            # validation
+            vol_paths.val_weights_path,
+
+            # test
+            vol_paths.test_data_path,
+            vol_paths.test_labels_path,
+            vol_paths.test_info_path,
+            vol_paths.test_weights_path,
+        ]
+
+        for p in error_paths:
+            logger.error("Missing file: %s", str(p))
+
+        for p in warning_paths:
+            logger.warning("Missing file: %s", str(p))
 
 
-# VOLUMES
+# VOLUME NAMES
+
+#    precipitates dryrun
 VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"
-volume_precipitates_dryrun = VolumePaths(VOLUME_PRECIPITATES_DRYRUN)
+
+#    precipitates
+VOLUME_PRECIPITATES_V1 = "PA66GF30"
 
 
 class ModelPaths(namedtuple("ModelPaths", ["model_name"])):
