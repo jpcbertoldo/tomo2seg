@@ -3,6 +3,8 @@ from matplotlib.pyplot import Figure, Axes, cm
 import numpy as np
 from numpy import ndarray
 
+from .logger import logger
+
 
 def tight_subplots(n: int, m: int, w: float, h: float) -> (Figure, Axes):
     fig, axs = plt.subplots(n, m, figsize=(w, h), sharex='all', sharey='all')
@@ -10,28 +12,43 @@ def tight_subplots(n: int, m: int, w: float, h: float) -> (Figure, Axes):
     return fig, axs
 
 
-def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray = None, normalized_voxels=False):
+def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray = None, normalized_voxels=False, is_color=False, vrange=None):
+    logger.debug(f"{volume.shape=}")
 
-    vmin, vmax = (0, 1) if normalized_voxels else (0, 255)
+    vmin, vmax = (0, 1) if normalized_voxels else (0, 255) if vrange is None else vrange
+
+    logger.debug(f"{vmin, vmax=}")
 
     if labels_mask is not None:
         assert volume.shape == labels_mask.shape
+    else:
+        logger.debug("No label mask given.")
 
     xy_axis, yz_axis, xz_axis = axs[0, 0], axs[0, 1], axs[1, 0]
     axs[1, 1].axis(False)
 
-    (height, width, depth) = volume.shape
+    if is_color:
+        (height, width, depth, _) = volume.shape
+    else:
+        (height, width, depth) = volume.shape
+
     xy_z_coord, yz_x_coord, xz_y_coord = int(depth // 2), int(width // 2), int(height // 2)
 
-    xy_axis.imshow(volume[:, :, xy_z_coord], vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
-    yz_axis.imshow(volume[yz_x_coord, :, :], vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
-    xz_axis.imshow(np.rot90(volume[:, xz_y_coord, :]), vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    logger.debug(f"{xy_z_coord, yz_x_coord, xz_y_coord=}")
+
+    kwargs = dict(interpolation=None) if is_color else dict(vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    xy_axis.imshow(xy_slice := volume[:, :, xy_z_coord], **kwargs)
+    yz_axis.imshow(yz_slice := volume[yz_x_coord, :, :], **kwargs)
+    xz_axis.imshow(np.rot90(xz_slice := volume[:, xz_y_coord, :]), **kwargs)
+
+    logger.debug(f"{xy_slice.shape, yz_slice.shape, xz_slice.shape=}")
 
     if labels_mask is not None:
+        kwargs = dict(cmap=cm.inferno, interpolation=None, alpha=0.5)
         volume_masked = np.ma.masked_where(labels_mask, volume)
-        xy_axis.imshow(volume_masked[:, :, xy_z_coord], cmap=cm.inferno, interpolation=None, alpha=0.5)
-        yz_axis.imshow(volume_masked[yz_x_coord, :, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
-        xz_axis.imshow(volume_masked[:, xz_y_coord, :], cmap=cm.inferno, interpolation=None, alpha=0.5)
+        xy_axis.imshow(volume_masked[:, :, xy_z_coord], **kwargs)
+        yz_axis.imshow(volume_masked[yz_x_coord, :, :], **kwargs)
+        xz_axis.imshow(volume_masked[:, xz_y_coord, :], **kwargs)
 
     xy_axis.set_title(f"XY :: z={xy_z_coord}")
     yz_axis.set_title(f"YZ :: x={yz_x_coord}")

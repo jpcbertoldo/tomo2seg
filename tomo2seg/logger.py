@@ -9,7 +9,7 @@ logger.handlers = []
 logger.propagate = False
 
 fmt = "[%(asctime)s.%(msecs)03d] %(name)s :: %(levelname)s :: {%(filename)s:%(funcName)s:%(lineno)03d}" 
-fmt += "\n%(message)s"
+fmt += "\n%(message)s\n"
 date_fmt = "%Y-%m-%d::%H:%M:%S"
 formatter = Formatter(fmt, datefmt=date_fmt)
 
