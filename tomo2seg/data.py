@@ -1,11 +1,13 @@
 from collections import namedtuple
-import pathlib
+from datetime import datetime
 from dataclasses import dataclass
+import pathlib
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 
 import yaml
 from numpy import ndarray
+from tensorflow.python.keras.models import Model
 from yaml import YAMLObject
 
 from .logger import logger
@@ -21,7 +23,6 @@ models_dir.mkdir(exist_ok=True)
 
 @dataclass
 class SetPartition(YAMLObject):
-
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
@@ -35,10 +36,10 @@ class SetPartition(YAMLObject):
 
     def get_volume_partition(self, volume: ndarray) -> ndarray:
         return volume[
-            self.x_range[0]:self.x_range[1],
-            self.y_range[0]:self.y_range[1],
-            self.z_range[0]:self.z_range[1],
-       ]
+               self.x_range[0]:self.x_range[1],
+               self.y_range[0]:self.y_range[1],
+               self.z_range[0]:self.z_range[1],
+               ]
 
 
 @dataclass
@@ -69,24 +70,37 @@ class Volume:
     val_labels = volume.val_partition.get_volume_partition(labels_volume)
     """
 
-    TRAIN_PARTITION_KEY = "train"
-    VAL_PARTITION_KEY = "val"
-    TEST_PARTITION_KEY = "test"
+    @dataclass
+    class Metadata(YAMLObject):
+        yaml_tag = "!Volume.Metadata"
 
-    volume_name: str
-    version_name: Optional[str] = None
-    _set_partitions: Dict[str, SetPartition] = None
+        TRAIN_PARTITION_KEY = "train"
+        VAL_PARTITION_KEY = "val"
+        TEST_PARTITION_KEY = "test"
+
+        dimensions: Tuple[int, int, int]
+        dtype: str
+        labels: List[int]
+        set_partitions: Optional[Dict[str, SetPartition]] = None
+
+    name: str
+    version: Optional[str] = None
+    _metadata: Optional["Volume.Metadata"] = None
 
     @property
     def fullname(self) -> str:
-        if self.version_name is not None:
-            return f"{self.volume_name}.{self.version_name}"
+        if self.version is not None:
+            return f"{self.name}.{self.version}"
         else:
-            return f"{self.volume_name}"
+            return f"{self.name}"
 
     @property
     def dir(self) -> Path:
         return data_dir / f"{self.fullname}"
+
+    @property
+    def metadata_path(self) -> Path:
+        return self.dir / f"{self.fullname}.metadata.yml"
 
     @property
     def data_path(self) -> Path:
@@ -105,31 +119,45 @@ class Volume:
         return self.dir / f"{self.fullname}.weights.raw"
 
     @property
-    def set_partitions_path(self) -> Path:
-        return self.dir / f"{self.fullname}.set-partitions.yml"
+    def metadata(self) -> "Volume.Metadata":
+
+        if self._metadata is None:
+            logger.debug(f"Loading metadata from `{self.metadata_path}`.")
+            with self.metadata_path.open("r") as file:
+                self._metadata = yaml.load(file, Loader=yaml.FullLoader)
+
+        return self._metadata
+
+    def write_metadata(self, key, value):
+        logger.debug(f"Writing to metadata file at `{self.metadata_path}`")
+
+        if self._metadata is None:
+            self.metadata  # load it
+
+        setattr(self._metadata, key, value)
+
+        with self.metadata_path.open("w") as f:
+            yaml.dump(self._metadata, f, default_flow_style=False, indent=4)
 
     @property
     def set_partitions(self) -> Dict[str, SetPartition]:
-        if self._set_partitions is None:
-            with self.set_partitions_path.open("r") as file:
-                self._set_partitions = yaml.load(file)
-        return self._set_partitions
+        return self.metadata.set_partitions
 
     @property
     def train_partition(self) -> SetPartition:
-        return self.set_partitions[self.TRAIN_PARTITION_KEY]
+        return self.set_partitions[self.Metadata.TRAIN_PARTITION_KEY]
 
     @property
     def val_partition(self) -> SetPartition:
-        return self.set_partitions[self.VAL_PARTITION_KEY]
+        return self.set_partitions[self.Metadata.VAL_PARTITION_KEY]
 
     @property
     def test_partition(self) -> SetPartition:
-        return self.set_partitions[self.TEST_PARTITION_KEY]
+        return self.set_partitions[self.Metadata.TEST_PARTITION_KEY]
 
     @classmethod
-    def with_check(cls, volume_name, version_name: str = None):
-        vol: "Volume" = cls(volume_name=volume_name, version_name=version_name)
+    def with_check(cls, name, version: str = None):
+        vol: "Volume" = cls(name=name, version=version)
 
         logger.debug(f"{vol=}")
 
@@ -138,13 +166,13 @@ class Volume:
             vol.data_path,
             vol.labels_path,
             vol.info_path,
+            vol.metadata_path,
         ]
 
         # these are not essential but important
         warning_paths: List[Path] = [
             # train
             vol.weights_path,
-            vol.set_partitions_path,
         ]
 
         for p in error_paths:
@@ -155,42 +183,91 @@ class Volume:
             if not p.exists():
                 logger.warning("Missing file: %s", str(p))
 
-        if vol.set_partitions_path.exists():
+        if vol.set_partitions is not None:
 
-            # train/val partitions must exist
-            for key in [cls.TRAIN_PARTITION_KEY, cls.VAL_PARTITION_KEY]:
+            for key in [
+                cls.Metadata.TRAIN_PARTITION_KEY, cls.Metadata.VAL_PARTITION_KEY, cls.Metadata.TEST_PARTITION_KEY
+            ]:
                 if key not in vol.set_partitions:
-                    logger.error("Missing set partition: %s", str(key))
-
-            # test partition SHOULD...
-            for key in [cls.TEST_PARTITION_KEY]:
-                if key not in vol.set_partitions:
-                    logger.error("Missing set partition: %s", str(key))
+                    logger.warning(f"Missing set partition: {key=}")
 
         return vol
 
 
 @dataclass
 class EstimationVolume:
+    @dataclass
+    class Metadata(YAMLObject):
+        yaml_tag = "EstimationVolume.Metadata"
 
-    volume: Volume
-    partition: SetPartition
+    volume_name: str
+    volume_version: str
     model_name: str
+    partition: Optional[SetPartition] = None
+    _metadata: Optional["EstimationVolume.Metadata"] = None
+
+    @property
+    def _volume(self) -> Volume:
+        return Volume(self.volume_name, self.volume_version)
 
     @property
     def fullname(self) -> str:
-        partition_name = self.partition.alias
-        if partition_name is None:
-            partition_name = f"x:{self.partition.x_range[0]}:{self.partition.x_range[1]}-y:{self.partition.y_range[0]}:{self.partition.y_range[1]}-z:{self.partition.z_range[0]}:{self.partition.z_range[1]}"
-        return f"vol:{self.volume.fullname}--set:{partition_name}--model:{self.model_name}"
+        if self.partition is None:
+            partition_name = "whole-volume"
+        else:
+            partition_name = self.partition.alias
+            if partition_name is None:
+                partition_name = f"x:{self.partition.x_range[0]}:{self.partition.x_range[1]}-y:{self.partition.y_range[0]}:{self.partition.y_range[1]}-z:{self.partition.z_range[0]}:{self.partition.z_range[1]}"
+        return f"vol={self._volume.fullname}.set={partition_name}.model={self.model_name}"
+
+    @property
+    def metadata_path(self) -> Path:
+        return self._volume.dir / f"{self.fullname}.metadata.yml"
+
+    @property
+    def metadata(self) -> "EstimationVolume.Metadata":
+
+        if not self.metadata_path.exists():
+            logger.debug(f"Creating metadata file at {self.metadata_path} {(now := datetime.now())=}")
+            self.write_metadata("create-datetime", now)
+
+        if self._metadata is None:
+            logger.debug(f"Loading metadata from `{self.metadata_path}`.")
+            with self.metadata_path.open("r") as file:
+                self._metadata = yaml.load(file, Loader=yaml.FullLoader)
+
+        return self._metadata
+
+    def write_metadata(self, key, value):
+        logger.debug(f"Writing to metadata file at `{self.metadata_path}`")
+
+        if self._metadata is None:
+            self._metadata = self.Metadata()
+
+        setattr(self._metadata, key, value)
+
+        with self.metadata_path.open("w") as f:
+            yaml.dump(self._metadata, f, default_flow_style=False, indent=4)
 
     @property
     def probabilities_path(self) -> Path:
-        return self.volume.dir / f"{self.fullname}.probabilities.raw"
+        return self._volume.dir / f"{self.fullname}.probabilities.npy"
+
+    def get_class_probability_path(self, class_idx: int) -> Path:
+        assert class_idx in self._volume.metadata.labels
+        return self._volume.dir / f"{self.fullname}.probability.class_idx={class_idx}.raw"
 
     @property
     def predictions_path(self) -> Path:
-        return self.volume.dir / f"{self.fullname}.predictions.raw"
+        return self._volume.dir / f"{self.fullname}.predictions.raw"
+
+    @property
+    def presoftmax_pixel_embeddings_path(self) -> Path:
+        return self._volume.dir / f"{self.fullname}.presoftmax_pixel_embeddings.npy"
+
+    @classmethod
+    def from_objects(cls, volume: Volume, model: Model, set_partition: SetPartition = None):
+        return cls(volume.name, volume.version, model.name, partition=set_partition)
 
 
 # VOLUME NAMES / VERSIONS
