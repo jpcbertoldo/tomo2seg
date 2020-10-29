@@ -36,10 +36,10 @@ class SetPartition(YAMLObject):
 
     def get_volume_partition(self, volume: ndarray) -> ndarray:
         return volume[
-               self.x_range[0]:self.x_range[1],
-               self.y_range[0]:self.y_range[1],
-               self.z_range[0]:self.z_range[1],
-               ]
+            self.x_range[0]:self.x_range[1],
+            self.y_range[0]:self.y_range[1],
+            self.z_range[0]:self.z_range[1],
+        ]
 
 
 @dataclass
@@ -69,6 +69,13 @@ class Volume:
     val_data = volume.val_partition.get_volume_partition(data_volume)
     val_labels = volume.val_partition.get_volume_partition(labels_volume)
     """
+
+    def xy_reduced(self, new_width: int, new_height: int, alias=None) -> SetPartition:
+        alias = alias if alias is not None else f"xy_reduced({new_width}, {new_height})"
+        return SetPartition(
+            (0, new_width), (0, new_height), (0, self._metadata.dimensions[2]),
+            alias=alias
+        )
 
     @dataclass
     class Metadata(YAMLObject):
