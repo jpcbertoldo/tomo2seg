@@ -7,7 +7,6 @@ from typing import List, Tuple, Dict, Optional
 
 import yaml
 from numpy import ndarray
-from tensorflow.python.keras.models import Model
 from yaml import YAMLObject
 
 from .logger import logger
@@ -88,6 +87,7 @@ class Volume:
         dimensions: Tuple[int, int, int]
         dtype: str
         labels: List[int]
+        labels_names: Dict[int, str]
         set_partitions: Optional[Dict[str, SetPartition]] = None
 
     name: str
@@ -201,15 +201,80 @@ class Volume:
         return vol
 
 
+# VOLUME NAMES / VERSIONS
+
+#    precipitates dryrun
+VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"
+
+#    precipitates
+VOLUME_PRECIPITATES_V1 = "PA66GF30", "v1"
+
+
+@dataclass
+class ModelPaths:
+    
+    name: str
+    version: str = None
+        
+    @property
+    def fullname(self) -> str:
+        if self.version is not None:
+            return f"{self.name}.{self.version}"
+        else:
+            return self.name
+
+    @property
+    def model_path(self) -> Path:
+        return models_dir / f"{self.fullname}"
+    
+    @property
+    def model_path_str(self) -> str:
+        return str(self.model_path)
+
+    @property
+    def autosaved_model_path(self) -> Path:
+        return models_dir / f"{self.fullname}-autosaved"
+    
+    @property
+    def autosaved_model_path_str(self) -> str:
+        return str(self.autosaved_model_path)
+
+    @property
+    def logger_path(self) -> Path:
+        return self.model_path / "logger.csv"
+
+    @property
+    def history_path(self) -> Path:
+        return self.model_path / "history.csv"
+
+    @property
+    def summary_path(self) -> Path:
+        return self.model_path / "summary.txt"
+
+    @property
+    def architecture_plot_path(self) -> Path:
+        return self.model_path / "architecture.png"
+
+    @property
+    def metadata_yml_path(self) -> Path:
+        return self.model_path / "metadata.yml"
+
+
 @dataclass
 class EstimationVolume:
+    
     @dataclass
     class Metadata(YAMLObject):
+        
         yaml_tag = "EstimationVolume.Metadata"
+        
+        exec_time: int = None
+        exec_name: str = None
 
     volume_name: str
     volume_version: str
     model_name: str
+    model_version: str
     partition: Optional[SetPartition] = None
     _metadata: Optional["EstimationVolume.Metadata"] = None
 
@@ -255,63 +320,63 @@ class EstimationVolume:
 
         with self.metadata_path.open("w") as f:
             yaml.dump(self._metadata, f, default_flow_style=False, indent=4)
+            
+    @property
+    def dir(self) -> Path:
+        (dir_ := self._volume.dir / f"{self.fullname}").mkdir(exist_ok=True)
+        return dir_
 
     @property
     def probabilities_path(self) -> Path:
-        return self._volume.dir / f"{self.fullname}.probabilities.npy"
+        return self.dir / f"{self.fullname}.probabilities.npy"
 
     def get_class_probability_path(self, class_idx: int) -> Path:
         assert class_idx in self._volume.metadata.labels
-        return self._volume.dir / f"{self.fullname}.probability.class_idx={class_idx}.raw"
+        return self.dir / f"{self.fullname}.probability.class_idx={class_idx}.raw"
 
     @property
     def predictions_path(self) -> Path:
-        return self._volume.dir / f"{self.fullname}.predictions.raw"
+        return self.dir / f"{self.fullname}.predictions.raw"
 
     @property
     def presoftmax_pixel_embeddings_path(self) -> Path:
-        return self._volume.dir / f"{self.fullname}.presoftmax_pixel_embeddings.npy"
+        return self.dir / f"{self.fullname}.presoftmax_pixel_embeddings.npy"
+    
+    @property
+    def pixelwise_classification_report_human(self) -> Path:
+        return self.dir / f"{self.fullname}.classification_report.human.yaml"
 
+    @property
+    def pixelwise_classification_report_exact(self) -> Path:
+        return self.dir / f"{self.fullname}.classification_report.exact.yaml"
+    
+    def get_class_roc_curve_path(self, class_idx: int) -> Path:
+        assert class_idx in self._volume.metadata.labels
+        return self.dir / f"{self.fullname}.roc_curve.class_idx={class_idx}.raw"
+
+    @property
+    def binary_confusion_matrices_path(self) -> Path:
+        return self.dir / f"{self.fullname}.binary_confusion_matrices.npy"
+
+    @property
+    def confusion_matrix_path(self) -> Path:
+        return self.dir / f"{self.fullname}.confusion_matrix.npy"
+
+    @property
+    def probabilities_histograms_path(self) -> Path:
+        return self.dir / f"{self.fullname}.probabilities-histograms.npy"
+    
+    @property
+    def voxel_normalized_entropy_path(self) -> Path:
+        return self.dir / f"{self.fullname}.voxel-normalized-entropy.raw"
+    
+    @property
+    def voxel_normalized_entropy_histograms_path(self) -> Path:
+        return self.dir / f"{self.fullname}.voxel-normalized-entropy-histograms.npy"
+    
+    def get_confusion_volume_path(self, class_idx) -> Path:
+        return self.dir / f"{self.fullname}.confusion-volume.class_idx={class_idx}.raw"
+    
     @classmethod
-    def from_objects(cls, volume: Volume, model: Model, set_partition: SetPartition = None):
-        return cls(volume.name, volume.version, model.name, partition=set_partition)
-
-
-# VOLUME NAMES / VERSIONS
-
-#    precipitates dryrun
-VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"
-
-#    precipitates
-VOLUME_PRECIPITATES_V1 = "PA66GF30", "v1"
-
-
-class ModelPaths(namedtuple("ModelPaths", ["model_name"])):
-
-    @property
-    def model_path(self) -> Path:
-        return models_dir / f"{self.model_name}"
-
-    @property
-    def autosaved_model_path(self) -> Path:
-        return models_dir / f"{self.model_name}-autosaved"
-
-    @property
-    def logger_path(self) -> Path:
-        return self.model_path / "logger.csv"
-
-    @property
-    def history_path(self) -> Path:
-        return self.model_path / "history.csv"
-
-    @property
-    def summary_path(self) -> Path:
-        return self.model_path / "summary.txt"
-
-    @property
-    def architecture_plot_path(self) -> Path:
-        return self.model_path / "architecture.png"
-
-    @property
-    def metadata_yml_path(self) -> Path:
-        return self.model_path / "metadata.yml"
+    def from_objects(cls, volume: Volume, model: ModelPaths, set_partition: SetPartition = None):
+        return cls(volume.name, volume.version, model.name, model.version, partition=set_partition)
