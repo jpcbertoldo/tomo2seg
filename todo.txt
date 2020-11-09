@@ -1,2 +1,43 @@
-* implement pixel-wise weighted cross entropy loss
+this is a living list of things that i realize that i can improve during development
 
+[general]
+implement pixel-wise weighted jaccard2 loss
+
+[data-management]
+todo2: v2 of the sequence generator to get the entire area (or not)
+dtype = "uint8"  # todo remove the cast inside the generator?
+
+[metadata]
+mirrored_strategy = tf.distribute.MirroredStrategy()  # todo add strategy to metadata
+
+[analysis]
+
+[viz]
+
+
+[to-cleanup]
+todo1: predict the whole slices with the 3x3 crops
+todo2: v2 of the sequence generator to get the entire area (or not)
+todo3: predict the whole validation volume
+    - remember to declar the aggregation strategy somewhere
+todo4: measure some metrics with it
+    - volume fraction estimation
+    - error blobs
+        - FP
+        - FN
+        - both
+        - blob stats
+            - min area
+            - max area
+            - count
+            - box dimensions
+                - longest length
+                - cubic direction
+        note:
+    - batch size
+    - image size
+    - n channels
+- n crops
+
+todo !!!!!!!!!!!!!!!!!!!!!!!!!!
+also save crop predictions so that i can compare models that might have different cropping schemes
