@@ -33,12 +33,32 @@ class SetPartition(YAMLObject):
     def z_partitioned_only(cls, x_size: int, y_size: int, z_min: int, z_max: int, alias=None) -> "SetPartition":
         return cls((0, x_size), (0, y_size), (z_min, z_max), alias=alias)
 
+    @classmethod
+    def from_dict(cls, dic: dict):
+        for k, v in dic.items():
+            if "range" in k:
+                assert len(v) == 2
+                dic[k] = tuple(v)
+        return cls(**dic)
+
     def get_volume_partition(self, volume: ndarray) -> ndarray:
         return volume[
             self.x_range[0]:self.x_range[1],
             self.y_range[0]:self.y_range[1],
             self.z_range[0]:self.z_range[1],
         ]
+
+    @property
+    def shape(self) -> Tuple[int, int, int]:
+        return (
+            self.x_range[1] - self.x_range[0],
+            self.y_range[1] - self.y_range[0],
+            self.z_range[1] - self.z_range[0],
+        )
+
+    @property
+    def n_voxels(self) -> int:
+        return self.shape[0] * self.shape[1] * self.shape[2]
 
 
 @dataclass
@@ -121,9 +141,15 @@ class Volume:
     def labels_path(self) -> Path:
         return self.dir / f"{self.fullname}.labels.raw"
 
+    def versioned_labels_path(self, version_suffix) -> Path:
+        return self.dir / f"{self.fullname}.labels-{version_suffix}.raw"
+
     @property
     def weights_path(self) -> Path:
         return self.dir / f"{self.fullname}.weights.raw"
+
+    def versioned_weights_path(self, version_suffix) -> Path:
+        return self.dir / f"{self.fullname}.weights-{version_suffix}.raw"
 
     @property
     def metadata(self) -> "Volume.Metadata":
@@ -152,15 +178,21 @@ class Volume:
 
     @property
     def train_partition(self) -> SetPartition:
-        return self.set_partitions[self.Metadata.TRAIN_PARTITION_KEY]
+        return SetPartition.from_dict(
+            self.set_partitions[self.Metadata.TRAIN_PARTITION_KEY]
+        )
 
     @property
     def val_partition(self) -> SetPartition:
-        return self.set_partitions[self.Metadata.VAL_PARTITION_KEY]
+        return SetPartition.from_dict(
+            self.set_partitions[self.Metadata.VAL_PARTITION_KEY]
+        )
 
     @property
     def test_partition(self) -> SetPartition:
-        return self.set_partitions[self.Metadata.TEST_PARTITION_KEY]
+        return SetPartition.from_dict(
+            self.set_partitions[self.Metadata.TEST_PARTITION_KEY]
+        )
 
     @classmethod
     def with_check(cls, name, version: str = None):
