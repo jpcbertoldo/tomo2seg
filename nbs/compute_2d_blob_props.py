@@ -144,8 +144,11 @@ def compute_all_axes(labels_volume, x_blobs_path, y_blobs_path, z_blobs_path):
             labels_volume[idx, :, :].copy()
             for idx in range(labels_volume.shape[0])
         ]
+
         logger.debug("Computing blobs")
         blobs2d_porosity = pd.DataFrame(get_2d_blobs_from_slices_only_porosity(axis_slices))
+        logger.debug(f"{blobs2d_porosity.shape=}")
+
         logger.debug("Saving")
         blobs2d_porosity.to_csv(x_blobs_path)
 
@@ -185,10 +188,11 @@ def main_porosity_all_axes(volume_name: str, volume_version: str, labels_version
 
     logger.debug(f"{(blobs_prefix_path := str(labels_path)[:-4])=}")
 
+    # [filenames]
     blobs_paths: Dict[str, Path] = {
-        "x_blobs_path": blobs_prefix_path + ".x-blobs.csv",
-        "y_blobs_path": blobs_prefix_path + ".y-blobs.csv",
-        "z_blobs_path": blobs_prefix_path + ".z-blobs.csv",
+        "x_blobs_path": blobs_prefix_path + ".porosity.x-blobs.csv",
+        "y_blobs_path": blobs_prefix_path + ".porosity.y-blobs.csv",
+        "z_blobs_path": blobs_prefix_path + ".porosity.z-blobs.csv",
     }
 
     for kwarg, path in blobs_paths.items():
