@@ -1,0 +1,127 @@
+100% (263116 of 263116) |################| Elapsed Time: 0:00:00 Time:  0:00:00
+
+---------------------------------------------------------------------------
+QhullError                                Traceback (most recent call last)
+<ipython-input-28-5adad96817d5> in <module>
+     13 ]
+     14 
+---> 15 props = skimage.measure.regionprops_table(
+     16     blobs,
+     17     cache=True,
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in regionprops_table(label_image, intensity_image, properties, cache, separator)
+    638         return {k: v[:0] for k, v in out_d.items()}
+    639 
+--> 640     return _props_to_dict(regions, properties=properties, separator=separator)
+    641 
+    642 
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in _props_to_dict(regions, properties, separator)
+    509         if np.isscalar(r) or prop in OBJECT_COLUMNS:
+    510             for i in range(n):
+--> 511                 column_buffer[i] = regions[i][prop]
+    512             out[prop] = np.copy(column_buffer)
+    513         else:
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in __getitem__(self, key)
+    391 
+    392     def __getitem__(self, key):
+--> 393         value = getattr(self, key, None)
+    394         if value is not None:
+    395             return value
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in wrapper(obj)
+    120 
+    121         if not ((prop in cache) and obj._cache_active):
+--> 122             cache[prop] = f(obj)
+    123 
+    124         return cache[prop]
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in convex_area(self)
+    188     @_cached
+    189     def convex_area(self):
+--> 190         return np.sum(self.convex_image)
+    191 
+    192     @property
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in wrapper(obj)
+    120 
+    121         if not ((prop in cache) and obj._cache_active):
+--> 122             cache[prop] = f(obj)
+    123 
+    124         return cache[prop]
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/measure/_regionprops.py in convex_image(self)
+    194     def convex_image(self):
+    195         from ..morphology.convex_hull import convex_hull_image
+--> 196         return convex_hull_image(self.image)
+    197 
+    198     @property
+
+~/projects/tomo2seg/condaenv/lib/python3.8/site-packages/skimage/morphology/convex_hull.py in convex_hull_image(image, offset_coordinates, tolerance)
+     64             # therefore, we reduce the number of coordinates by using a
+     65             # convex hull on the original set, before offsetting.
+---> 66             hull0 = ConvexHull(coords)
+     67             coords = hull0.points[hull0.vertices]
+     68 
+
+qhull.pyx in scipy.spatial.qhull.ConvexHull.__init__()
+
+qhull.pyx in scipy.spatial.qhull._Qhull.__init__()
+
+QhullError: QH6154 Qhull precision error: Initial simplex is flat (facet 1 is coplanar with the interior point)
+
+While executing:  | qhull i Qt
+Options selected for Qhull 2019.1.r 2019/06/21:
+  run-id 1731126008  incidence  Qtriangulate  _pre-merge  _zero-centrum
+  _max-width  4  Error-roundoff 4.3e-15  _one-merge 3e-14  _near-inside 1.5e-13
+  Visible-distance 8.5e-15  U-max-coplanar 8.5e-15  Width-outside 1.7e-14
+  _wide-facet 5.1e-14  _maxoutside 3.4e-14
+
+The input to qhull appears to be less than 3 dimensional, or a
+computation has overflowed.
+
+Qhull could not construct a clearly convex simplex from points:
+- p1(v4):     0     1     0
+- p6(v3):     1     4     0
+- p3(v2):     1     1     0
+- p0(v1):     0     0     0
+
+The center point is coplanar with a facet, or a vertex is coplanar
+with a neighboring facet.  The maximum round off error for
+computing distances is 4.3e-15.  The center point, facets and distances
+to the center point are as follows:
+
+center point      0.5      1.5        0
+
+facet p6 p3 p0 distance=    0
+facet p1 p3 p0 distance=    0
+facet p1 p6 p0 distance=    0
+facet p1 p6 p3 distance=    0
+
+These points either have a maximum or minimum x-coordinate, or
+they maximize the determinant for k coordinates.  Trial points
+are first selected from points that maximize a coordinate.
+
+The min and max coordinates for each dimension are:
+  0:         0         1  difference=    1
+  1:         0         4  difference=    4
+  2:         0         0  difference=    0
+
+If the input should be full dimensional, you have several options that
+may determine an initial simplex:
+  - use 'QJ'  to joggle the input and make it full dimensional
+  - use 'QbB' to scale the points to the unit cube
+  - use 'QR0' to randomly rotate the input for different maximum points
+  - use 'Qs'  to search all points for the initial simplex
+  - use 'En'  to specify a maximum roundoff error less than 4.3e-15.
+  - trace execution with 'T3' to see the determinant for each point.
+
+If the input is lower dimensional:
+  - use 'QJ' to joggle the input and make it full dimensional
+  - use 'Qbk:0Bk:0' to delete coordinate k from the input.  You should
+    pick the coordinate with the least range.  The hull will have the
+    correct topology.
+  - determine the flat containing the points, rotate the points
+    into a coordinate plane, and delete the other coordinates.
+  - add one or more points to make the input full dimensional.

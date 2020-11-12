@@ -144,6 +144,19 @@ class Volume:
     def versioned_labels_path(self, version_suffix) -> Path:
         return self.dir / f"{self.fullname}.labels-{version_suffix}.raw"
 
+    def _blobs_path_prefix(self, labels_version: Optional[str]) -> str:
+        if labels_version is not None:
+            labels_volume_path = self.versioned_labels_path(labels_version)
+        else:
+            labels_volume_path = self.labels_path
+        return str(labels_volume_path)[:-4]
+
+    def blobs3d_volume_path(self, class_idx: int, labels_version: Optional[str] = None) -> Path:
+        return self.dir / f"{self._blobs_path_prefix(labels_version)}.blobs3d.class_idx={class_idx}.raw"
+
+    def blobs3d_props_path(self, class_idx: int, labels_version: Optional[str] = None) -> Path:
+        return self.dir / f"{self._blobs_path_prefix(labels_version)}.blobs3d.props.class_idx={class_idx}.csv"
+
     @property
     def weights_path(self) -> Path:
         return self.dir / f"{self.fullname}.weights.raw"
