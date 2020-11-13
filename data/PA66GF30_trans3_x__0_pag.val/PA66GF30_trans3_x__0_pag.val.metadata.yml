@@ -1,0 +1,14 @@
+!Volume.Metadata
+dimensions:
+  - 500
+  - 500
+  - 500
+dtype: "uint8"
+labels:
+  - 0
+  - 1
+  - 2
+labels_names:
+  0: "matrix"
+  1: "fiber"
+  2: "porosity"

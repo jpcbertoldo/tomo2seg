@@ -1,0 +1,30 @@
+!Volume.Metadata
+dimensions:
+  - 1300
+  - 1040
+  - 1900
+dtype: "uint8"
+labels:
+  - 0
+  - 1
+  - 2
+labels_names:
+  0: "matrix"
+  1: "fiber"
+  2: "porosity"
+set_partitions:
+  train:
+    x_range: [0, 1299]
+    y_range: [0, 1039]
+    z_range: [0, 1299]
+    alias: "train"
+  val:
+    x_range: [0, 1299]
+    y_range: [0, 1039]
+    z_range: [1600, 1899]
+    alias: "val"
+  test:
+    x_range: [0, 1299]
+    y_range: [0, 1039]
+    z_range: [1300, 1599]
+    alias: "test"

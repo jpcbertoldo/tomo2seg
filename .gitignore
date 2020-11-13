@@ -131,6 +131,6 @@ dmypy.json
 
 
 data/*
-!data/.gitignore
+!data/**/*.yml
 
 .idea/
