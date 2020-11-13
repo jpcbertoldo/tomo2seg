@@ -14,6 +14,7 @@ str(model_paths.autosaved_model_path) + ".hdf5",  # todo move this to inside Mod
 LR schedule + to the history
 
 [analysis]
+add variation_of_information to my metrics notebook   [link] function skimage.metrics.variation_of_information() on skimage
 
 [viz]
 
