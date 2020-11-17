@@ -246,15 +246,6 @@ class Volume:
         return vol
 
 
-# VOLUME NAMES / VERSIONS
-
-#    precipitates dryrun
-VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"
-
-#    precipitates
-VOLUME_PRECIPITATES_V1 = "PA66GF30", "v1"
-
-
 @dataclass
 class ModelPaths:
     

@@ -7,7 +7,7 @@ import yaml
 from tensorflow.python.keras.utils.layer_utils import count_params
 from yaml import YAMLObject
 
-from .data import ModelPaths, VolumePaths
+from .data import ModelPaths, Volume
 from .volume_img_segm import VolumeImgSegmSequence
 
 
@@ -90,7 +90,7 @@ class Metadata(YAMLObject):
             cls,
             model, 
             model_paths: ModelPaths,
-            volume_paths: VolumePaths, 
+            volume_paths: Volume,
             train_generator: VolumeImgSegmSequence,
             val_generator: VolumeImgSegmSequence,
             model_generator_function, nb_filters_0, input_shape,
@@ -103,7 +103,7 @@ class Metadata(YAMLObject):
         n_batches_per_epoch = len(train_generator)
         n_examples_per_epoch = batch_size * n_batches_per_epoch
 
-        # just sintatic sugar
+        # just syntatic sugar
         ds = Metadata.Dataset
         vol = Metadata.Dataset.Volume
         archi = Metadata.Architecture

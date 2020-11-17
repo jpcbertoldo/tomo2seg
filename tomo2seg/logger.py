@@ -8,7 +8,7 @@ logger = logging.getLogger("tomo2seg")
 logger.handlers = []
 logger.propagate = False
 
-fmt = "[%(asctime)s.%(msecs)03d] %(name)s :: %(levelname)s :: {%(filename)s:%(funcName)s:%(lineno)03d}" 
+fmt = "%(levelname)s::%(name)s::{%(filename)s:%(funcName)s:%(lineno)03d}::[%(asctime)s.%(msecs)03d]"
 fmt += "\n%(message)s\n"
 date_fmt = "%Y-%m-%d::%H:%M:%S"
 formatter = Formatter(fmt, datefmt=date_fmt)
