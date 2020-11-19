@@ -20,6 +20,8 @@ from scipy.interpolate import RegularGridInterpolator, griddata
 from scipy.ndimage import map_coordinates
 from tensorflow.keras.utils import Sequence
 
+from .logger import logger
+
 
 class GT2D(Enum):
     """Canonical 2D Geometric Transformation. Any other one is equivalent to these."""
@@ -34,7 +36,7 @@ class GT2D(Enum):
 
 
 # a dictionary of transformations so that they can be referenced with a string key
-GT2D_FUNCTIONS: Dict[GT2D, Callable[[ndarray], ndarray]] = {
+_GT2D_FUNCTIONS: Dict[GT2D, Callable[[ndarray], ndarray]] = {
     GT2D.identity: lambda x: x,  # identity
     GT2D.rotation90: partial(np.rot90, axes=(0, 1), k=1),
     GT2D.flip_horizontal: partial(np.flip, axis=0),
@@ -52,34 +54,39 @@ def _compose(f: Callable, g: Callable) -> Callable:
 
 # composed transformations - any other combination will result in something equivalent to these here
 # todo verify compositions
-GT2D_FUNCTIONS.update({
+_GT2D_FUNCTIONS.update({
     GT2D.flip_horizontal__transpose: _compose(
-        f=GT2D_FUNCTIONS[GT2D.flip_horizontal],
-        g=GT2D_FUNCTIONS[GT2D.transpose]
+        f=_GT2D_FUNCTIONS[GT2D.flip_horizontal],
+        g=_GT2D_FUNCTIONS[GT2D.transpose]
     ),
     GT2D.flip_vertical__flip_horizontal: _compose(
-        f=GT2D_FUNCTIONS[GT2D.flip_vertical],
-        g=GT2D_FUNCTIONS[GT2D.flip_horizontal]
+        f=_GT2D_FUNCTIONS[GT2D.flip_vertical],
+        g=_GT2D_FUNCTIONS[GT2D.flip_horizontal]
     ),
     GT2D.rotation90__flip_vertical: _compose(
-        f=GT2D_FUNCTIONS[GT2D.rotation90],
-        g=GT2D_FUNCTIONS[GT2D.flip_vertical]
+        f=_GT2D_FUNCTIONS[GT2D.rotation90],
+        g=_GT2D_FUNCTIONS[GT2D.flip_vertical]
     ),
 })
 
-GT2D_VAL2FUNC = {
-    gt.value: func for gt, func in GT2D_FUNCTIONS.items()
+_GT2D_VAL2FUNC = {
+    gt.value: func for gt, func in _GT2D_FUNCTIONS.items()
 }
 
 
-def _get_random_geometric_transformation_2d(random_state: RandomState) -> GT2D:
-    """"""
-    return random_state.choice(list(GT2D_VAL2FUNC.keys()), 1, replace=False)
+def _get_random_gt_2d(random_state: RandomState) -> GT2D:
+    """todo make this batch-enabled"""
+    return random_state.choice(GT2D, 1, replace=False)[0]
 
 
 class GT3D(Enum):
     """Canonical 3D Geometric Transformation. Any other one is equivalent to these."""
     pass
+
+
+def _get_random_gt_3d(random_state: RandomState) -> GT3D:
+    """todo make this batch-enabled"""
+    return random_state.choice(GT3D, 1, replace=False)[0]
 
 
 @dataclass
@@ -97,14 +104,13 @@ class ET:
 
 
 @dataclass
-class RandomGridPositionGenerator(ABC):
+class GridPositionGenerator(ABC):
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
-    random_state: RandomState
-    
+
     def __post_init__(self):
-        assert all(range_[0] <= range_[1] for range_ in self)
+        assert all(range_[0] <= range_[1] for range_ in self.axes_ranges)
     
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -121,7 +127,9 @@ class RandomGridPositionGenerator(ABC):
         pass
 
 
-class UniformGridPosition(RandomGridPositionGenerator):
+@dataclass
+class UniformGridPosition(GridPositionGenerator):
+    random_state: RandomState
 
     def _concrete_getitem(self, n: int) -> ndarray:  # (n, 3)
         return np.stack([
@@ -131,7 +139,35 @@ class UniformGridPosition(RandomGridPositionGenerator):
                 size=n
             )
             for range_ in self.axes_ranges  # x, y, z-range
-        ]).reshape(n, 3)
+        ], axis=-1)
+
+
+@dataclass
+class SequentialGridPosition(GridPositionGenerator):
+
+    x_step: int
+    y_step: int
+    z_step: int
+
+    def __post_init__(self):
+        self.positions = np.array([
+            [x, y, z]
+            for z, y, x in product(
+                range(*self.z_range, self.z_step),
+                range(*self.y_range, self.y_step),
+                range(*self.x_range, self.x_step),
+            )
+        ])
+        logger.info(f"The {self.__class__.__name__} has {len(self.positions)=} different positions (therefore crops).")
+        self.current_position = 0
+
+    def __len__(self):
+        return len(self.positions)
+
+    def _concrete_getitem(self, n: int) -> ndarray:
+        positions = self.positions[self.current_position:(new_current := self.current_position + n)]
+        self.current_position = new_current if new_current < len(self.positions) else 0
+        return positions
 
 
 @dataclass
@@ -143,7 +179,7 @@ class ProbabilityField3D(ABC):
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
-    random_state: RandomState
+    random_state: Optional[RandomState]  # some concrete classes are deterministic
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -161,17 +197,34 @@ class ProbabilityField3D(ABC):
 
 
 @dataclass
-class UniformGTEverywhere(ProbabilityField3D):
+class GTConstantEverywhere(ProbabilityField3D):
 
-    gt_type: Union[GT2D, GT3D]  # GT2D or GT3D
+    gt: Union[GT2D, GT3D]
 
     def _concrete_getitem(self, x: int, y: int, z: int):
-        """Every position has a uniform probability over all the possible transformations."""
+        return self.gt
 
-        if self.gt_type is GT2D:
-            _get_random_geometric_transformation_2d(random_state=self.random_state)
+    @classmethod
+    def build(cls, gt, **ranges):
+        return cls(
+            gt=gt,
+            random_state=None,
+            **ranges,
+        )
 
-        elif self.gt_type is GT3D:
+
+@dataclass
+class GTUniformEverywhere(ProbabilityField3D):
+
+    gt_type: Type  # GT2D or GT3D
+
+    def _concrete_getitem(self, x: int, y: int, z: int):
+        """Every position has a uniform probability over all the possible transformations. todo make this batch-enabled"""
+
+        if self.gt_type == GT2D:
+            return _get_random_gt_2d(random_state=self.random_state)
+
+        elif self.gt_type == GT3D:
             raise NotImplementedError("GT3D not implemented yet.")
 
         else:
@@ -179,13 +232,21 @@ class UniformGTEverywhere(ProbabilityField3D):
 
 
 @dataclass
-class ConstantValueShiftEverywhere(ProbabilityField3D):
+class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
-    shift: float = .0  # shift on the normalized range [0, 1]
+    shift: float  # shift on the normalized range [0, 1]
 
     def _concrete_getitem(self, x: int, y: int, z: int):
-        return 0
+        return self.shift
+
+    @classmethod
+    def build(cls, shift, **ranges):
+        return cls(
+            shift=shift,
+            random_state=None,
+            **ranges,
+        )
 
 
 def uniform_cuboid(
@@ -213,6 +274,23 @@ def uniform_cuboid(
 
 
 @dataclass
+class ET3DConstantDisplacementEverywhere(ProbabilityField3D):
+
+    displacement: Optional[ET]
+
+    def _concrete_getitem(self, x: int, y: int, z: int):
+        return self.displacement
+
+    @classmethod
+    def build(cls, displacement, **ranges):
+        return cls(
+            displacement=displacement,
+            random_state=None,
+            **ranges,
+        )
+
+
+@dataclass
 class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
     """
     For each position in the 3D field, return 8 values, which correspond to the displacements of
@@ -231,22 +309,28 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
     cuboid_shape: Tuple[float, float, float] = field(init=False)
 
     # the limits of the data grid, i.e. the elastic crop cannot go outside of this range
-    xlim: Tuple[int, int]
-    ylim: Tuple[int, int]
-    zlim: Tuple[int, int]
+    crop_xlim: Tuple[int, int]
+    crop_ylim: Tuple[int, int]
+    crop_zlim: Tuple[int, int]
 
     spline_order: int = 3  # default copied from etienne's code
 
     def __post_init__(self, elastic_param):
         if isinstance(elastic_param, float):
-            self.cuboid_shape = tuple(elastic_param * s for s in self.crop_shape)
+            # cuboids proportional to the crop's size on each axis
+            self.cuboid_shape = (
+                elastic_param * self.crop_shape[0],
+                elastic_param * self.crop_shape[1],
+                elastic_param * self.crop_shape[2],
+            )
         elif isinstance(elastic_param, tuple):
+            # cuboid shape given
             self.cuboid_shape = elastic_param
         else:
             raise ValueError()
 
     def _concrete_getitem(self, x0: int, y0: int, z0: int) -> ET:
-        """(x0, y0, z0) is the 000 corner of a 3D crop."""
+        """(x0, y0, z0) is the 000 corner of a 3D crop. todo make this batch-enabled!"""
         uniform_cuboid_ = partial(uniform_cuboid, random_state=self.random_state)
 
         displacements: Dict[str, Tuple[float, float, float]] = {}
@@ -264,16 +348,16 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
             # the max/min here make sure that the elastic crop doesn't go out of the data grid
             transformed_corner3d = uniform_cuboid_(
                 x_range=(
-                    max(self.xlim[0], x - self.cuboid_shape[0]),
-                    min(self.xlim[1], x + self.cuboid_shape[0])
+                    max(self.crop_xlim[0], x - self.cuboid_shape[0]),
+                    min(self.crop_xlim[1], x + self.cuboid_shape[0])
                 ),
                 y_range=(
-                    max(self.ylim[0], y - self.cuboid_shape[1]),
-                    min(self.ylim[1], y + self.cuboid_shape[1])
+                    max(self.crop_ylim[0], y - self.cuboid_shape[1]),
+                    min(self.crop_ylim[1], y + self.cuboid_shape[1])
                 ),
                 z_range=(
-                    max(self.zlim[0], z - self.cuboid_shape[2]),
-                    min(self.zlim[1], z + self.cuboid_shape[2])
+                    max(self.crop_zlim[0], z - self.cuboid_shape[2]),
+                    min(self.crop_zlim[1], z + self.cuboid_shape[2])
                 ),
             )
 
@@ -284,6 +368,20 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
             )
 
         return ET(**displacements)
+
+    @classmethod
+    def build_half_voxel_cuboid(cls, crop_shape, crop_xlim, crop_ylim, crop_zlim):
+        """
+        Each voxel's probability cuboid is of the size of a voxel (half to each direction)
+        in all the axes, so there is no overlap between each voxel's domain.
+        """
+        return cls(
+            elastic_param=(.5, .5, .5),
+            crop_shape=crop_shape,
+            crop_xlim=crop_xlim,
+            crop_ylim=crop_ylim,
+            crop_zlim=crop_zlim,
+        )
 
 
 @dataclass
@@ -348,9 +446,10 @@ class MetaCrop3D:
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
     """ Extract labels of interest from input segmentation """
-    im_out = np.zeros((im.shape[0], im.shape[1], len(labels)))
+    assert im.ndim == 3
+    im_out = np.zeros((im.shape[0], im.shape[1], im.shape[2], len(labels)))
     for final_label, label in enumerate(labels):
-        im_out[:, :, final_label] = (im == label).astype(np.uint8)
+        im_out[:, :, :, final_label] = (im == label).astype(np.uint8)
     return im_out
 
 
@@ -370,8 +469,8 @@ def meta2crop(
     :param interpolation: "spline", "nearest"
     :return:
     """
-    assert (is_label and interpolation == "nearest") or not is_label
-    assert not (interpolation == "spline" and spline_order is None)
+    assert (is_label and interpolation == "nearest") or not is_label, "Labels should only be interpolated witht he nearest neighbor because it is a categorical value."
+    assert not (meta_crop.elastic_transformation is not None and interpolation == "spline" and spline_order is None), "If elastic transformation is used then the interpolation spline order has to be given."
 
     if meta_crop.elastic_transformation is None:
         crop = volume[meta_crop.slice].copy()
@@ -439,7 +538,7 @@ def meta2crop(
 
     # geometric_transformation
     if meta_crop.is2d:
-        func = GT2D_VAL2FUNC[meta_crop.geometric_transformation]
+        func = _GT2D_VAL2FUNC[meta_crop.geometric_transformation.value]
 
         if meta_crop.is2d_on(0):
             sx = crop.shape[1]
@@ -458,6 +557,7 @@ def meta2crop(
 
     if not is_label:
         crop += meta_crop.value_shift
+        crop = np.clip(crop, a_min=0., a_max=1.)
         return crop
     else:
         return crop.astype(int)
@@ -468,7 +568,7 @@ class MetaCrop3DGenerator:
     volume_shape: Tuple[int, int, int]
     crop_shape: Tuple[int, int, int]
 
-    x0y0z0_generator: RandomGridPositionGenerator
+    x0y0z0_generator: GridPositionGenerator
     elastic_transformation_field: ProbabilityField3D
     geometric_transformation_field: ProbabilityField3D
     value_shift_field: ProbabilityField3D
@@ -479,26 +579,23 @@ class MetaCrop3DGenerator:
 
         # make sure it wont try to slice something beyond the 3d array
         # the crops are referenced by their 000 corner (i.e. the lowest x, y, z)
-        assert all(
-            0 <= axis_range[0] and axis_range[1] < axis_size - crop_size
-            for axis_range, axis_size, crop_size in zip(
-                self.x0y0z0_generator.axes_ranges, self.volume_shape, self.crop_shape
-            )
-        )
+        for axis_idx in range(3):
+            axis_range = self.x0y0z0_generator.axes_ranges[axis_idx]
+            volume_axis_size = self.volume_shape[axis_idx]
+            crop_axis_size = self.crop_shape[axis_idx]
+            assert (
+                    0 <= axis_range[0] and axis_range[1] <= volume_axis_size - crop_axis_size
+            ), f"{axis_range=} of {axis_idx=} is incompatible with {volume_axis_size=} and { crop_axis_size=}"
 
-        assert all(
-            (xyz_range == et_range == gt_range == vs_range)
-            for xyz_range, et_range, gt_range, vs_range in zip(
-                self.x0y0z0_generator.axes_ranges,
-                self.elastic_transformation_field.axes_ranges,
-                self.geometric_transformation_field.axes_ranges,
-                self.value_shift_field.axes_ranges,
-            )
-        )
-    #
-    # @property
-    # def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
-    #     return self.x0y0z0_generator.axes_ranges
+        for axis_idx in range(3):
+            xyz_range = self.x0y0z0_generator.axes_ranges[axis_idx]
+            et_range = self.elastic_transformation_field.axes_ranges[axis_idx]
+            gt_range = self.geometric_transformation_field.axes_ranges[axis_idx]
+            vs_range = self.value_shift_field.axes_ranges[axis_idx]
+            # the grid position generator's range (xyz_range) is the reference because it was verified above
+            assert (xyz_range == et_range), f"Incompatible {et_range=} with {xyz_range=}"
+            assert (xyz_range == gt_range), f"Incompatible {gt_range=} with {xyz_range=}"
+            assert (xyz_range == vs_range), f"Incompatible {vs_range=} with {xyz_range=}"
 
     def get(self, n: int) -> List[MetaCrop3D]:
         x0y0z0_array = self.x0y0z0_generator.get(n)  # n x 3
@@ -532,44 +629,60 @@ class VolumeCropSequence(Sequence):
     meta2data: Callable[[MetaCrop3D], ndarray] = field(init=False)
     meta2labels: Callable[[MetaCrop3D], ndarray] = field(init=False)
 
-    meta_crops_hist_buffer: List[MetaCrop3D] = field(init=False)
+    # each internal list corresponds to a batch
+    meta_crops_hist_buffer: List[List[MetaCrop3D]] = field(init=False)
     meta_crops_hist_path: Optional[Path] = None
+
+    debug__no_data_check: InitVar[bool] = False
 
     @property
     def crop_shape(self):
         return self.meta_crop_generator.crop_shape
 
-    def __post_init__(self):
+    def __post_init__(self, debug__no_data_check):
+
+        logger.debug(f"Initializing {self.__class__.__name__}.")
 
         if self.data_volume.ndim > 3:
             raise NotImplementedError("Multi channel 3D not supported.")
-
         assert self.data_volume.ndim == 3
 
         assert self.data_volume.shape == self.labels_volume.shape == self.meta_crop_generator.volume_shape
         self.volume_shape = self.data_volume.shape
 
-        assert np.max(self.data_volume, axis=None) <= 1.
-        assert np.min(self.data_volume, axis=None) >= 0.
-
-        assert all(lab in self.labels for lab in np.unique(self.labels_volume))
+        if not debug__no_data_check:
+            logger.debug("Checking values and labels consistency, this might be a bit slow.")
+            assert (data_max_val := np.max(self.data_volume, axis=None)) <= 1., f"{data_max_val=} > 1. Did you forget to normalize?"
+            assert (data_min_val := np.min(self.data_volume, axis=None)) >= 0., f"{data_min_val=} < 0. Did you forget to normalize?"
+            assert all(lab in self.labels for lab in np.unique(self.labels_volume))
+            logger.debug("Done.")
 
         assert self.batch_size >= 1
         assert self.epoch_size >= 1
 
         self.meta_crops_hist_buffer = []
 
-        if self.meta_crops_hist_path is not None and not self.meta_crops_hist_path.exists():
-            with self.meta_crops_hist_path.open("w") as f:
-                f.write(f"batch_idx,{MetaCrop3D.csv_header}")
+        if self.meta_crops_hist_path is not None:
+            if not self.meta_crops_hist_path.exists():
+                logger.info("A meta crops history file path was given but it still doesn't exist. Writing csv headers.")
+                with self.meta_crops_hist_path.open("w") as f:
+                    f.write(f"batch_idx,{MetaCrop3D.csv_header}")
+        else:
+            logger.warning("No meta crops history file path given. The randomly generated crops will not be saved!")
 
+        # noinspection PyTypeChecker,PyUnresolvedReferences
         self.meta2data = partial(
             meta2crop,
             volume=self.data_volume,
             is_label=False,
             interpolation="spline",
-            spline_order=self.meta_crop_generator.elastic_transformation_field.spline_order,
+            spline_order=getattr(
+                self.meta_crop_generator.elastic_transformation_field,
+                "spline_order",
+                None
+            ),
         )
+        # noinspection PyTypeChecker
         self.meta2labels = partial(
             meta2crop,
             volume=self.labels_volume,

@@ -1,4 +1,3 @@
-from collections import namedtuple
 from datetime import datetime
 from dataclasses import dataclass
 import pathlib
@@ -9,6 +8,7 @@ import yaml
 from numpy import ndarray
 from yaml import YAMLObject
 
+from model import Model
 from .logger import logger
 
 here = pathlib.Path(__file__).parent.resolve().absolute()
@@ -251,56 +251,6 @@ class Volume:
 
 
 @dataclass
-class ModelPaths:
-    
-    name: str
-    version: str = None
-        
-    @property
-    def fullname(self) -> str:
-        if self.version is not None:
-            return f"{self.name}.{self.version}"
-        else:
-            return self.name
-
-    @property
-    def model_path(self) -> Path:
-        return models_dir / f"{self.fullname}"
-    
-    @property
-    def model_path_str(self) -> str:
-        return str(self.model_path)
-
-    @property
-    def autosaved_model_path(self) -> Path:
-        return models_dir / f"{self.fullname}-autosaved"
-    
-    @property
-    def autosaved_model_path_str(self) -> str:
-        return str(self.autosaved_model_path)
-
-    @property
-    def logger_path(self) -> Path:
-        return self.model_path / "logger.csv"
-
-    @property
-    def history_path(self) -> Path:
-        return self.model_path / "history.csv"
-
-    @property
-    def summary_path(self) -> Path:
-        return self.model_path / "summary.txt"
-
-    @property
-    def architecture_plot_path(self) -> Path:
-        return self.model_path / "architecture.png"
-
-    @property
-    def metadata_yml_path(self) -> Path:
-        return self.model_path / "metadata.yml"
-
-
-@dataclass
 class EstimationVolume:
     
     @dataclass
@@ -418,5 +368,5 @@ class EstimationVolume:
         return self.dir / f"{self.fullname}.confusion-volume.class_idx={class_idx}.raw"
     
     @classmethod
-    def from_objects(cls, volume: Volume, model: ModelPaths, set_partition: SetPartition = None):
+    def from_objects(cls, volume: Volume, model: Model, set_partition: SetPartition = None):
         return cls(volume.name, volume.version, model.name, model.version, partition=set_partition)

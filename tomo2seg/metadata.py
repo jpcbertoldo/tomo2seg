@@ -7,7 +7,8 @@ import yaml
 from tensorflow.python.keras.utils.layer_utils import count_params
 from yaml import YAMLObject
 
-from .data import ModelPaths, Volume
+from .data import Volume
+from model import Model
 from .volume_img_segm import VolumeImgSegmSequence
 
 
@@ -89,7 +90,7 @@ class Metadata(YAMLObject):
     def build(
             cls,
             model, 
-            model_paths: ModelPaths,
+            model_paths: Model,
             volume_paths: Volume,
             train_generator: VolumeImgSegmSequence,
             val_generator: VolumeImgSegmSequence,

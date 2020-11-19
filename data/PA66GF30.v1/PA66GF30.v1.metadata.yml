@@ -14,17 +14,17 @@ labels_names:
   2: "porosity"
 set_partitions:
   train:
-    x_range: [0, 1299]
-    y_range: [0, 1039]
-    z_range: [0, 1299]
+    x_range: [0, 1300]
+    y_range: [0, 1040]
+    z_range: [0, 1300]
     alias: "train"
   val:
-    x_range: [0, 1299]
-    y_range: [0, 1039]
-    z_range: [1600, 1899]
+    x_range: [0, 1300]
+    y_range: [0, 1040]
+    z_range: [1600, 1900]
     alias: "val"
   test:
-    x_range: [0, 1299]
-    y_range: [0, 1039]
-    z_range: [1300, 1599]
+    x_range: [0, 1300]
+    y_range: [0, 1040]
+    z_range: [1300, 1600]
     alias: "test"
