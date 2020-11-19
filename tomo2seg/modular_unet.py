@@ -97,7 +97,7 @@ def generic_unet_up(conv_sampling, nb_filters=None, name=None):
 
 
 def u_net(
-    shape,
+    input_shape,
     nb_filters_0,
     output_channels,
     name=None,
@@ -129,7 +129,7 @@ def u_net(
     depth = 4
     # sigma_noise = 0.03
 
-    x = x0 = Input(shape)
+    x = x0 = Input(input_shape)
 
     skips = {}
     for i in range(depth):

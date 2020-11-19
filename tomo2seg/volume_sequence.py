@@ -633,6 +633,7 @@ class VolumeCropSequence(Sequence):
     meta_crops_hist_buffer: List[List[MetaCrop3D]] = field(init=False)
     meta_crops_hist_path: Optional[Path] = None
 
+    use_labels_ohe: bool = False
     debug__no_data_check: InitVar[bool] = False
 
     @property
@@ -726,7 +727,7 @@ class VolumeCropSequence(Sequence):
                 self.crop_shape[0],
                 self.crop_shape[1],
                 self.crop_shape[2],
-                len(self.labels),
+                len(self.labels) if self.use_labels_ohe else 1,
             ),
             dtype=np.uint8
         )
@@ -734,9 +735,11 @@ class VolumeCropSequence(Sequence):
         for idx, meta_crop in enumerate(batch_meta_crops):
             data_crop = self.meta2data(meta_crop)
             labels_crop = self.meta2labels(meta_crop)
-            labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
+            if self.use_labels_ohe:
+                labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
+            else:
+                labels_crop = labels_crop.reshape(*labels_crop.shape, 1)
             X[idx], y[idx] = data_crop, labels_crop
-
         return X, y
 
     def get_clone(self, new_batch_size, new_epoch_size) -> "VolumeCropSequence":

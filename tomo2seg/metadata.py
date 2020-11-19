@@ -8,7 +8,7 @@ from tensorflow.python.keras.utils.layer_utils import count_params
 from yaml import YAMLObject
 
 from .data import Volume
-from model import Model
+from .model import Model
 from .volume_img_segm import VolumeImgSegmSequence
 
 
@@ -94,7 +94,7 @@ class Metadata(YAMLObject):
             volume_paths: Volume,
             train_generator: VolumeImgSegmSequence,
             val_generator: VolumeImgSegmSequence,
-            model_generator_function, nb_filters_0, input_shape,
+            nb_filters_0, input_shape,
             n_epochs
     ):
 
@@ -170,7 +170,7 @@ class Metadata(YAMLObject):
                 model.count_params(), humanize.intword(model.count_params()),
                 count_params(model.trainable_weights), humanize.intword(count_params(model.trainable_weights)),
                 count_params(model.non_trainable_weights), humanize.intword(count_params(model.non_trainable_weights)),
-                f"{model_generator_function.__module__}.{model_generator_function.__name__}", nb_filters_0,
+                model.factory_function, nb_filters_0,
                 str(input_shape)
             ),
             batch_size=batch_size,

@@ -8,13 +8,12 @@ import yaml
 from numpy import ndarray
 from yaml import YAMLObject
 
-from model import Model
 from .logger import logger
 
 here = pathlib.Path(__file__).parent.resolve().absolute()
 root_dir = (here / "..").resolve()
 data_dir = (root_dir / "data").resolve()
-models_dir = (root_dir / "models").resolve()
+models_dir = (data_dir / "models").resolve()
 
 data_dir.mkdir(exist_ok=True)
 models_dir.mkdir(exist_ok=True)
@@ -368,5 +367,5 @@ class EstimationVolume:
         return self.dir / f"{self.fullname}.confusion-volume.class_idx={class_idx}.raw"
     
     @classmethod
-    def from_objects(cls, volume: Volume, model: Model, set_partition: SetPartition = None):
+    def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None):
         return cls(volume.name, volume.version, model.name, model.version, partition=set_partition)
