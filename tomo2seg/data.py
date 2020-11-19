@@ -141,7 +141,9 @@ class Volume:
     def labels_path(self) -> Path:
         return self.dir / f"{self.fullname}.labels.raw"
 
-    def versioned_labels_path(self, version_suffix) -> Path:
+    def versioned_labels_path(self, version_suffix: Optional[str] = None) -> Path:
+        if version_suffix is None:
+            return self.labels_path
         return self.dir / f"{self.fullname}.labels-{version_suffix}.raw"
 
     def _blobs_path_prefix(self, labels_version: Optional[str]) -> str:
@@ -161,7 +163,9 @@ class Volume:
     def weights_path(self) -> Path:
         return self.dir / f"{self.fullname}.weights.raw"
 
-    def versioned_weights_path(self, version_suffix) -> Path:
+    def versioned_weights_path(self, version_suffix: Optional[str] = None) -> Path:
+        if version_suffix is None:
+            return self.weights_path
         return self.dir / f"{self.fullname}.weights-{version_suffix}.raw"
 
     @property
