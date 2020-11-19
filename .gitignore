@@ -132,9 +132,11 @@ dmypy.json
 
 data/*
 !data/**/*.yml
-!data/models/*/architecture.png
-!data/models/*/metadata.yml
-!data/models/*/summary.txt
-!data/models/*/logger.csv
+!data/models/**/architecture.png
+!data/models/**/metadata.yml
+!data/models/**/summary.txt
+!data/models/**/logger.csv
 
 .idea/
+nbs/.archive/
+nbs/tutorials/
