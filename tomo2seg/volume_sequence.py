@@ -235,6 +235,8 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
     ylim: Tuple[int, int]
     zlim: Tuple[int, int]
 
+    spline_order: int = 3  # default copied from etienne's code
+
     def __post_init__(self, elastic_param):
         if isinstance(elastic_param, float):
             self.cuboid_shape = tuple(elastic_param * s for s in self.crop_shape)
@@ -286,7 +288,7 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
 
 @dataclass
 class MetaCrop3D:
-    csv_header = ClassVar[str] = "x,y,z,elastic_transformation,geometric_transformation,value_shift"
+    csv_header: ClassVar[str] = "x,y,z,elastic_transformation,geometric_transformation,value_shift"
 
     x: slice
     y: slice
@@ -533,8 +535,6 @@ class VolumeCropSequence(Sequence):
     meta_crops_hist_buffer: List[MetaCrop3D] = field(init=False)
     meta_crops_hist_path: Optional[Path] = None
 
-    spline_order: int = 3  # default copied from etienne's code
-
     @property
     def crop_shape(self):
         return self.meta_crop_generator.crop_shape
@@ -568,7 +568,7 @@ class VolumeCropSequence(Sequence):
             volume=self.data_volume,
             is_label=False,
             interpolation="spline",
-            spline_order=self.spline_order,
+            spline_order=self.meta_crop_generator.elastic_transformation_field.spline_order,
         )
         self.meta2labels = partial(
             meta2crop,

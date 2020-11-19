@@ -1,7 +1,8 @@
 # VOLUME NAMES / VERSIONS
 
 #    dryrun
-VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"
+VOLUME_PRECIPITATES_DRYRUN = "PA66GF30_trans3_x__0_pag"  # deprecated
+VOLUME_PRECIPITATES_DRYRUN_VAL = "PA66GF30_trans3_x__0_pag", "val"
 
 # composite
 VOLUME_COMPOSITE_V1 = "PA66GF30", "v1"
