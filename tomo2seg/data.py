@@ -167,6 +167,9 @@ class Volume:
             return self.weights_path
         return self.dir / f"{self.fullname}.weights-{version_suffix}.raw"
 
+    def volume_processing_dir(self, execid: str) -> Path:
+        return self.dir / f"process-volume.execution={execid}"
+
     @property
     def metadata(self) -> "Volume.Metadata":
 
@@ -258,12 +261,11 @@ class EstimationVolume:
         yaml_tag = "EstimationVolume.Metadata"
         
         exec_time: int = None
-        exec_name: str = None
+        execid: str = None
 
     volume_name: str
     volume_version: str
     model_name: str
-    model_version: str
     partition: Optional[SetPartition] = None
     _metadata: Optional["EstimationVolume.Metadata"] = None
 
@@ -312,7 +314,7 @@ class EstimationVolume:
             
     @property
     def dir(self) -> Path:
-        (dir_ := self._volume.dir / f"{self.fullname}").mkdir(exist_ok=True)
+        (dir_ := data_dir / f"{self.fullname}").mkdir(exist_ok=True)
         return dir_
 
     @property
@@ -368,4 +370,4 @@ class EstimationVolume:
     
     @classmethod
     def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None):
-        return cls(volume.name, volume.version, model.name, model.version, partition=set_partition)
+        return cls(volume.name, volume.version, model.name, partition=set_partition)

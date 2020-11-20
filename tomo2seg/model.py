@@ -18,6 +18,15 @@ class Model:
     factory_function: Optional[str] = None
     factory_kwargs: Optional[dict] = None
 
+    @classmethod
+    def build_from_model_name(cls, name: str):
+        master_name, version, fold_str, runid_str = name.split(".")
+        fold = int(fold_str)
+        runid = int("".join(runid_str.split("-")))
+        return cls(
+            master_name, version, fold, runid
+        )
+
     def __post_init__(self):
         if self.factory_function is not None and callable(self.factory_function):
             self.factory_function = f"{self.factory_function.__module__}.{self.factory_function.__name__}"

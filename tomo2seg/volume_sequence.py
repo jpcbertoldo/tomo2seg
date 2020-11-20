@@ -83,7 +83,7 @@ def _get_random_gt_2d(random_state: RandomState) -> GT2D:
 
 class GT3D(Enum):
     """Canonical 3D Geometric Transformation. Any other one is equivalent to these."""
-    pass
+    identity = 0
 
 
 def _get_random_gt_3d(random_state: RandomState) -> GT3D:
@@ -214,6 +214,14 @@ class GTConstantEverywhere(ProbabilityField3D):
             **ranges,
         )
 
+    @classmethod
+    def build_gt2d_identity(cls, **ranges):
+        return cls.build(gt=GT2D.identity, **ranges)
+
+    @classmethod
+    def build_gt3d_identity(cls, **ranges):
+        return cls.build(gt=GT3D.identity, **ranges)
+
 
 @dataclass
 class GTUniformEverywhere(ProbabilityField3D):
@@ -250,6 +258,10 @@ class VSConstantEverywhere(ProbabilityField3D):
             **ranges,
         )
 
+    @classmethod
+    def build_no_shift(cls, **ranges):
+        return cls.build(shift=0., **ranges)
+
 
 def uniform_cuboid(
     x_range: Tuple[float, float],
@@ -263,6 +275,7 @@ def uniform_cuboid(
     X [cuboid_y_range[0], cuboid_y_range[1]]
     X [cuboid_z_range[0], cuboid_z_range[1]].
     """
+    # noinspection PyTypeChecker
     return tuple(
         (
             random_state.uniform(
@@ -276,7 +289,7 @@ def uniform_cuboid(
 
 
 @dataclass
-class ET3DConstantDisplacementEverywhere(ProbabilityField3D):
+class ET3DConstantEverywhere(ProbabilityField3D):
 
     displacement: Optional[ET]
 
@@ -290,6 +303,10 @@ class ET3DConstantDisplacementEverywhere(ProbabilityField3D):
             random_state=None,
             **ranges,
         )
+
+    @classmethod
+    def build_no_displacement(cls, **ranges):
+        return cls.build(displacement=None, **ranges)
 
 
 @dataclass
@@ -572,9 +589,9 @@ class MetaCrop3DGenerator:
     crop_shape: Tuple[int, int, int]
 
     x0y0z0_generator: GridPositionGenerator
-    elastic_transformation_field: ProbabilityField3D
-    geometric_transformation_field: ProbabilityField3D
-    value_shift_field: ProbabilityField3D
+    et_field: ProbabilityField3D
+    gt_field: ProbabilityField3D
+    vs_field: ProbabilityField3D
 
     def __post_init__(self):
 
@@ -587,14 +604,14 @@ class MetaCrop3DGenerator:
             volume_axis_size = self.volume_shape[axis_idx]
             crop_axis_size = self.crop_shape[axis_idx]
             assert (
-                    0 <= axis_range[0] and axis_range[1] <= volume_axis_size - crop_axis_size
+                    0 <= axis_range[0] and axis_range[1] <= volume_axis_size - crop_axis_size + 1
             ), f"{axis_range=} of {axis_idx=} is incompatible with {volume_axis_size=} and { crop_axis_size=}"
 
         for axis_idx in range(3):
             xyz_range = self.x0y0z0_generator.axes_ranges[axis_idx]
-            et_range = self.elastic_transformation_field.axes_ranges[axis_idx]
-            gt_range = self.geometric_transformation_field.axes_ranges[axis_idx]
-            vs_range = self.value_shift_field.axes_ranges[axis_idx]
+            et_range = self.et_field.axes_ranges[axis_idx]
+            gt_range = self.gt_field.axes_ranges[axis_idx]
+            vs_range = self.vs_field.axes_ranges[axis_idx]
             # the grid position generator's range (xyz_range) is the reference because it was verified above
             assert (xyz_range == et_range), f"Incompatible {et_range=} with {xyz_range=}"
             assert (xyz_range == gt_range), f"Incompatible {gt_range=} with {xyz_range=}"
@@ -607,9 +624,9 @@ class MetaCrop3DGenerator:
                 x=slice(x, x + self.crop_shape[0]),
                 y=slice(y, y + self.crop_shape[1]),
                 z=slice(z, z + self.crop_shape[2]),
-                elastic_transformation=self.elastic_transformation_field[x, y, z],
-                geometric_transformation=self.geometric_transformation_field[x, y, z],
-                value_shift=self.value_shift_field[x, y, z],
+                elastic_transformation=self.et_field[x, y, z],
+                geometric_transformation=self.gt_field[x, y, z],
+                value_shift=self.vs_field[x, y, z],
             )
             for x, y, z in x0y0z0_array
         ]
@@ -681,7 +698,7 @@ class VolumeCropSequence(Sequence):
             is_label=False,
             interpolation="spline",
             spline_order=getattr(
-                self.meta_crop_generator.elastic_transformation_field,
+                self.meta_crop_generator.et_field,
                 "spline_order",
                 None
             ),
