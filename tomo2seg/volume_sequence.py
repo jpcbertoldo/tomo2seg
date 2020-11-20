@@ -1,5 +1,7 @@
 """
-Keras 3D crop generator from a volume.
+3D crop generator from a volume.
+todo make this module batch-enabled
+todo make this all with keras backend
 """
 
 # Standard packages
@@ -391,9 +393,9 @@ class MetaCrop3D:
     x: slice
     y: slice
     z: slice
-    elastic_transformation: Optional[ET]
-    geometric_transformation: Union[GT2D, GT3D]
-    value_shift: float  # shift on the normalized range [0, 1]
+    et: Optional[ET]
+    gt: Union[GT2D, GT3D]
+    vs: float  # shift on the normalized range [0, 1]
 
     @property
     def slice(self) -> Tuple[slice, slice, slice]:
@@ -424,7 +426,7 @@ class MetaCrop3D:
             coord + displacement
             for coord, displacement in zip(
                 self.get_corner_coords(x_, y_, z_),
-                getattr(self.elastic_transformation, f"c{x_}{y_}{z_}")
+                getattr(self.et, f"c{x_}{y_}{z_}")
             )
         )
 
@@ -441,7 +443,7 @@ class MetaCrop3D:
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
-        return f"{self.x},{self.y},{self.z},{repr(self.elastic_transformation)},{self.geometric_transformation.value},{self.value_shift}"
+        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.value},{self.vs}"
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -470,9 +472,9 @@ def meta2crop(
     :return:
     """
     assert (is_label and interpolation == "nearest") or not is_label, "Labels should only be interpolated witht he nearest neighbor because it is a categorical value."
-    assert not (meta_crop.elastic_transformation is not None and interpolation == "spline" and spline_order is None), "If elastic transformation is used then the interpolation spline order has to be given."
+    assert not (meta_crop.et is not None and interpolation == "spline" and spline_order is None), "If elastic transformation is used then the interpolation spline order has to be given."
 
-    if meta_crop.elastic_transformation is None:
+    if meta_crop.et is None:
         crop = volume[meta_crop.slice].copy()
     else:
         corners_binaries = list(product((0, 1), (0, 1), (0, 1)))
@@ -538,7 +540,7 @@ def meta2crop(
 
     # geometric_transformation
     if meta_crop.is2d:
-        func = _GT2D_VAL2FUNC[meta_crop.geometric_transformation.value]
+        func = _GT2D_VAL2FUNC[meta_crop.gt.value]
 
         if meta_crop.is2d_on(0):
             sx = crop.shape[1]
@@ -555,12 +557,13 @@ def meta2crop(
     else:
         pass
 
-    if not is_label:
-        crop += meta_crop.value_shift
+    if is_label:
+        return crop.astype(int)
+    else:
+        crop += meta_crop.vs
+        # the transformations might result in something out of the normalized range
         crop = np.clip(crop, a_min=0., a_max=1.)
         return crop
-    else:
-        return crop.astype(int)
 
 
 @dataclass
