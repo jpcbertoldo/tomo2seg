@@ -1,8 +1,9 @@
+import time
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import pathlib
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, ClassVar
 
 import yaml
 from numpy import ndarray
@@ -27,6 +28,12 @@ class SetPartition(YAMLObject):
     alias: Optional[str]
 
     yaml_tag = "!SetPartition"
+
+    @property
+    def canonical_alias(self) -> str:
+        return f"x:{self.x_range[0]}:{self.x_range[1]}-" \
+               f"y:{self.y_range[0]}:{self.y_range[1]}-" \
+               f"z:{self.z_range[0]}:{self.z_range[1]}"
 
     @classmethod
     def z_partitioned_only(cls, x_size: int, y_size: int, z_min: int, z_max: int, alias=None) -> "SetPartition":
@@ -253,105 +260,79 @@ class Volume:
 
 
 @dataclass
-class EstimationVolume:
-    
-    @dataclass
-    class Metadata(YAMLObject):
-        
-        yaml_tag = "EstimationVolume.Metadata"
-        
-        exec_time: int = None
-        execid: str = None
+class EstimationVolume(YAMLObject):
+    """"""
 
-    volume_name: str
-    volume_version: str
+    yaml_tag: ClassVar[str] = "tomo2seg.EstimationVolume"
+
+    volume_fullname: str
     model_name: str
+    runid: int = field(default_factory=lambda: int(time.time()))
     partition: Optional[SetPartition] = None
-    _metadata: Optional["EstimationVolume.Metadata"] = None
-
-    @property
-    def _volume(self) -> Volume:
-        return Volume(self.volume_name, self.volume_version)
 
     @property
     def fullname(self) -> str:
-        if self.partition is None:
-            partition_name = "whole-volume"
-        else:
-            partition_name = self.partition.alias
-            if partition_name is None:
-                partition_name = f"x:{self.partition.x_range[0]}:{self.partition.x_range[1]}-y:{self.partition.y_range[0]}:{self.partition.y_range[1]}-z:{self.partition.z_range[0]}:{self.partition.z_range[1]}"
-        return f"vol={self._volume.fullname}.set={partition_name}.model={self.model_name}"
+        partition_name = "whole-volume" if self.partition is None else (
+            self.partition.alias or self.partition.canonical_alias
+        )
+        s = str(self.runid)
+        return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.runid={s[:4]}-{s[4:7]}-{s[7:]}"
+
+    @property
+    def dir(self) -> Path:
+        (dir_ := data_dir / self.fullname).mkdir(exist_ok=True)
+        return dir_
 
     @property
     def metadata_path(self) -> Path:
-        return self._volume.dir / f"{self.fullname}.metadata.yml"
+        pth = self.dir / f"{self.fullname}.metadata.yml"
+        if not pth.exists():
+            logger.debug(f"Creating metadata file {pth}.")
+            pth.touch()
+        return pth
 
-    @property
-    def metadata(self) -> "EstimationVolume.Metadata":
+    def __getitem__(self, key):
+        return getattr(self, key)
 
-        if not self.metadata_path.exists():
-            logger.debug(f"Creating metadata file at {self.metadata_path} {(now := datetime.now())=}")
-            self.write_metadata("create-datetime", now)
-
-        if self._metadata is None:
-            logger.debug(f"Loading metadata from `{self.metadata_path}`.")
-            with self.metadata_path.open("r") as file:
-                self._metadata = yaml.load(file, Loader=yaml.FullLoader)
-
-        return self._metadata
-
-    def write_metadata(self, key, value):
-        logger.debug(f"Writing to metadata file at `{self.metadata_path}`")
-
-        if self._metadata is None:
-            self._metadata = self.Metadata()
-
-        setattr(self._metadata, key, value)
-
+    def __setitem__(self, key, value):
+        logger.debug(f"Writing to file {self.metadata_path=}.")
+        setattr(self, key, value)
         with self.metadata_path.open("w") as f:
-            yaml.dump(self._metadata, f, default_flow_style=False, indent=4)
-            
-    @property
-    def dir(self) -> Path:
-        (dir_ := data_dir / f"{self.fullname}").mkdir(exist_ok=True)
-        return dir_
+            yaml.dump(self, f, default_flow_style=False, indent=4)
 
     @property
     def probabilities_path(self) -> Path:
         return self.dir / f"{self.fullname}.probabilities.npy"
 
     def get_class_probability_path(self, class_idx: int) -> Path:
-        assert class_idx in self._volume.metadata.labels
-        return self.dir / f"{self.fullname}.probability.class_idx={class_idx}.raw"
+        return self.dir / f"{self.fullname}.probability.class-idx={class_idx}.raw"
 
     @property
     def predictions_path(self) -> Path:
         return self.dir / f"{self.fullname}.predictions.raw"
 
     @property
-    def presoftmax_pixel_embeddings_path(self) -> Path:
-        return self.dir / f"{self.fullname}.presoftmax_pixel_embeddings.npy"
+    def presoftmax_voxel_embeddings_path(self) -> Path:
+        return self.dir / f"{self.fullname}.presoftmax-voxel-embeddings.npy"
     
     @property
-    def pixelwise_classification_report_human(self) -> Path:
-        return self.dir / f"{self.fullname}.classification_report.human.yaml"
+    def voxelwise_classification_report_human(self) -> Path:
+        return self.dir / f"{self.fullname}.voxelwise-classification-report.human.yaml"
 
     @property
-    def pixelwise_classification_report_exact(self) -> Path:
-        return self.dir / f"{self.fullname}.classification_report.exact.yaml"
+    def voxelwise_classification_report_exact(self) -> Path:
+        return self.dir / f"{self.fullname}.voxelwise-classification-report.exact.yaml"
     
     def get_class_roc_curve_path(self, class_idx: int) -> Path:
-        assert class_idx in self._volume.metadata.labels
-        return self.dir / f"{self.fullname}.roc_curve.class_idx={class_idx}.raw"
+        return self.dir / f"{self.fullname}.roc-curve.class-idx={class_idx}.raw"
 
     @property
     def binary_confusion_matrices_path(self) -> Path:
-        return self.dir / f"{self.fullname}.binary_confusion_matrices.npy"
+        return self.dir / f"{self.fullname}.binary-confusion-matrices.npy"
 
     @property
     def confusion_matrix_path(self) -> Path:
-        return self.dir / f"{self.fullname}.confusion_matrix.npy"
+        return self.dir / f"{self.fullname}.confusion-matrix.npy"
 
     @property
     def probabilities_histograms_path(self) -> Path:
@@ -366,8 +347,13 @@ class EstimationVolume:
         return self.dir / f"{self.fullname}.voxel-normalized-entropy-histograms.npy"
     
     def get_confusion_volume_path(self, class_idx) -> Path:
-        return self.dir / f"{self.fullname}.confusion-volume.class_idx={class_idx}.raw"
+        return self.dir / f"{self.fullname}.confusion-volume.class-idx={class_idx}.raw"
     
     @classmethod
-    def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None):
-        return cls(volume.name, volume.version, model.name, partition=set_partition)
+    def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None, runid=None):
+        return cls(
+            volume_fullname=volume.fullname,
+            model_name=model.name,
+            partition=set_partition,
+            runid=runid
+        )

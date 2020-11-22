@@ -106,6 +106,8 @@ def u_net(
 
     Note that the dimensions of the input images should be
     multiples of 16.
+
+    todo make this multichannel enabled
 """
     import functools
     unet_block = functools.partial(

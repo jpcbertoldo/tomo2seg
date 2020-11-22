@@ -128,6 +128,27 @@ class GridPositionGenerator(ABC):
     def _concrete_getitem(self, n: int) -> ndarray:  # (n, 3)
         pass
 
+    @classmethod
+    def build_from_volume_crop_shapes(
+            cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int], *args, **kwargs
+    ):
+        if "x_range" in kwargs or "y_range" in kwargs or "z_range" in kwargs:
+            raise ValueError(
+                f"Trying to build {cls.__name__} from volume and crop shapes but range values were given in kwargs. "
+                f"Please remove them. {list(kwargs.keys())=}"
+            )
+        ranges = {
+            "x_range": (0, volume_shape[0] - crop_shape[0] + 1),
+            "y_range": (0, volume_shape[1] - crop_shape[1] + 1),
+            "z_range": (0, volume_shape[2] - crop_shape[2] + 1),
+        }
+        logger.info(f"Built {cls.__name__} from {volume_shape=} and {crop_shape=} ==> {ranges}")
+        # noinspection PyArgumentList
+        return cls(
+            *args,
+            **{**kwargs, **ranges}
+        )
+
 
 @dataclass
 class UniformGridPosition(GridPositionGenerator):
@@ -147,17 +168,17 @@ class UniformGridPosition(GridPositionGenerator):
 @dataclass
 class SequentialGridPosition(GridPositionGenerator):
 
-    x_step: int
-    y_step: int
-    z_step: int
+    n_steps_x: int
+    n_steps_y: int
+    n_steps_z: int
 
     def __post_init__(self):
         self.positions = np.array([
-            [x, y, z]
+            [int(x), int(y), int(z)]
             for z, y, x in product(
-                range(*self.z_range, self.z_step),
-                range(*self.y_range, self.y_step),
-                range(*self.x_range, self.x_step),
+                np.linspace(self.z_range[0], self.z_range[1] - 1, self.n_steps_z, endpoint=True),
+                np.linspace(self.y_range[0], self.y_range[1] - 1, self.n_steps_y, endpoint=True),
+                np.linspace(self.x_range[0], self.x_range[1] - 1, self.n_steps_x, endpoint=True),
             )
         ])
         logger.info(f"The {self.__class__.__name__} has {len(self.positions)=} different positions (therefore crops).")
@@ -171,6 +192,21 @@ class SequentialGridPosition(GridPositionGenerator):
         self.current_position = new_current if new_current < len(self.positions) else 0
         return positions
 
+    @classmethod
+    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]):
+        n_steps = dict(
+            n_steps_x=int(np.ceil(volume_shape[0] / crop_shape[0])),
+            n_steps_y=int(np.ceil(volume_shape[1] / crop_shape[1])),
+            n_steps_z=int(np.ceil(volume_shape[2] / crop_shape[2])),
+        )
+        logger.info(f"Building {cls.__name__} with minimal overlap (smallest n_steps in each directions) {n_steps=}.")
+        # noinspection PyArgumentList
+        return cls.build_from_volume_crop_shapes(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            **n_steps,
+        )
+
 
 @dataclass
 class ProbabilityField3D(ABC):
@@ -182,6 +218,34 @@ class ProbabilityField3D(ABC):
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
     random_state: Optional[RandomState]  # some concrete classes are deterministic
+
+    # noinspection PyArgumentList
+    @classmethod
+    def _build(cls, *args, **kwargs):
+        if "grid_position_generator_" in kwargs:
+            grid_position_generator = kwargs["grid_position_generator_"]
+            logger.info(f"Building {cls.__name__} with {{x, y, z}}_range from {grid_position_generator=}")
+            return cls._build_from_grid_position_generator(*args, **kwargs)
+        else:
+            cls(*args, **kwargs)
+
+    @classmethod
+    def _build_from_grid_position_generator(cls, grid_position_generator_: GridPositionGenerator, *args, **kwargs):
+
+        if "x_range" in kwargs or "y_range" in kwargs or "z_range" in kwargs:
+            raise ValueError(
+                f"Ambiguous ranges arguments. "
+                f"If you want to build from {grid_position_generator_=} do not pass {{x, y, z}}_range kwargs."
+            )
+
+        # noinspection PyArgumentList
+        return cls(
+            *args,
+            x_range=grid_position_generator_.x_range,
+            y_range=grid_position_generator_.y_range,
+            z_range=grid_position_generator_.z_range,
+            **kwargs,
+        )
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -207,20 +271,23 @@ class GTConstantEverywhere(ProbabilityField3D):
         return self.gt
 
     @classmethod
-    def build(cls, gt, **ranges):
-        return cls(
+    def build(cls, gt, **kwargs):
+        # noinspection PyArgumentList
+        return cls._build(
             gt=gt,
             random_state=None,
-            **ranges,
+            **kwargs,
         )
 
     @classmethod
-    def build_gt2d_identity(cls, **ranges):
-        return cls.build(gt=GT2D.identity, **ranges)
+    def build_gt2d_identity(cls, **kwargs):
+        # noinspection PyArgumentList
+        return cls.build(gt=GT2D.identity, **kwargs)
 
     @classmethod
-    def build_gt3d_identity(cls, **ranges):
-        return cls.build(gt=GT3D.identity, **ranges)
+    def build_gt3d_identity(cls, **kwargs):
+        # noinspection PyArgumentList
+        return cls.build(gt=GT3D.identity, **kwargs)
 
 
 @dataclass
@@ -229,7 +296,10 @@ class GTUniformEverywhere(ProbabilityField3D):
     gt_type: Type  # GT2D or GT3D
 
     def _concrete_getitem(self, x: int, y: int, z: int):
-        """Every position has a uniform probability over all the possible transformations. todo make this batch-enabled"""
+        """
+        Every position has a uniform probability over all the possible transformations.
+        todo make this batch-enabled
+        """
 
         if self.gt_type == GT2D:
             return _get_random_gt_2d(random_state=self.random_state)
@@ -239,6 +309,24 @@ class GTUniformEverywhere(ProbabilityField3D):
 
         else:
             raise ValueError(f"Unknown type of Geometric Transformation. {self.gt_type=}")
+
+    @classmethod
+    def build_2d(cls, *args, **kwargs):
+        # noinspection PyArgumentList
+        return cls._build(
+            *args,
+            gt_type=GT2D,
+            **kwargs,
+        )
+
+    @classmethod
+    def build_3d(cls, *args, **kwargs):
+        # noinspection PyArgumentList
+        return cls._build(
+            *args,
+            gt_type=GT3D,
+            **kwargs,
+        )
 
 
 @dataclass
@@ -251,16 +339,18 @@ class VSConstantEverywhere(ProbabilityField3D):
         return self.shift
 
     @classmethod
-    def build(cls, shift, **ranges):
-        return cls(
+    def build(cls, shift, **kwargs):
+        # noinspection PyArgumentList
+        return cls._build(
             shift=shift,
             random_state=None,
-            **ranges,
+            **kwargs,
         )
 
     @classmethod
-    def build_no_shift(cls, **ranges):
-        return cls.build(shift=0., **ranges)
+    def build_no_shift(cls, **kwargs):
+        # noinspection PyArgumentList
+        return cls.build(shift=0., **kwargs)
 
 
 def uniform_cuboid(
@@ -297,16 +387,18 @@ class ET3DConstantEverywhere(ProbabilityField3D):
         return self.displacement
 
     @classmethod
-    def build(cls, displacement, **ranges):
-        return cls(
+    def build(cls, displacement, **kwargs):
+        # noinspection PyArgumentList
+        return cls._build(
             displacement=displacement,
             random_state=None,
-            **ranges,
+            **kwargs,
         )
 
     @classmethod
-    def build_no_displacement(cls, **ranges):
-        return cls.build(displacement=None, **ranges)
+    def build_no_displacement(cls, **kwargs):
+        # noinspection PyArgumentList
+        return cls.build(displacement=None, **kwargs)
 
 
 @dataclass
@@ -386,20 +478,24 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
                 transformed_corner3d[2] - z,
             )
 
+        # noinspection PyArgumentList
         return ET(**displacements)
 
     @classmethod
-    def build_half_voxel_cuboid(cls, crop_shape, crop_xlim, crop_ylim, crop_zlim):
+    def build_half_voxel_cuboid(cls, crop_shape, crop_xlim, crop_ylim, crop_zlim, spline_order, **kwargs):
         """
         Each voxel's probability cuboid is of the size of a voxel (half to each direction)
         in all the axes, so there is no overlap between each voxel's domain.
         """
-        return cls(
+        # noinspection PyArgumentList
+        return cls._build(
             elastic_param=(.5, .5, .5),
             crop_shape=crop_shape,
             crop_xlim=crop_xlim,
             crop_ylim=crop_ylim,
             crop_zlim=crop_zlim,
+            spline_order=spline_order,
+            **kwargs,
         )
 
 
@@ -468,6 +564,7 @@ def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
     assert im.ndim == 3
     im_out = np.zeros((im.shape[0], im.shape[1], im.shape[2], len(labels)))
     for final_label, label in enumerate(labels):
+        # noinspection PyUnresolvedReferences
         im_out[:, :, :, final_label] = (im == label).astype(np.uint8)
     return im_out
 
@@ -488,8 +585,11 @@ def meta2crop(
     :param interpolation: "spline", "nearest"
     :return:
     """
-    assert (is_label and interpolation == "nearest") or not is_label, "Labels should only be interpolated witht he nearest neighbor because it is a categorical value."
-    assert not (meta_crop.et is not None and interpolation == "spline" and spline_order is None), "If elastic transformation is used then the interpolation spline order has to be given."
+    assert (is_label and interpolation == "nearest") or not is_label, \
+        "Labels should only be interpolated with he nearest neighbor because it is a categorical value."
+
+    assert not (meta_crop.et is not None and interpolation == "spline" and spline_order is None), \
+        "If elastic transformation is used then the interpolation spline order has to be given."
 
     if meta_crop.et is None:
         crop = volume[meta_crop.slice].copy()
@@ -624,9 +724,9 @@ class MetaCrop3DGenerator:
                 x=slice(x, x + self.crop_shape[0]),
                 y=slice(y, y + self.crop_shape[1]),
                 z=slice(z, z + self.crop_shape[2]),
-                elastic_transformation=self.et_field[x, y, z],
-                geometric_transformation=self.gt_field[x, y, z],
-                value_shift=self.vs_field[x, y, z],
+                et=self.et_field[x, y, z],
+                gt=self.gt_field[x, y, z],
+                vs=self.vs_field[x, y, z],
             )
             for x, y, z in x0y0z0_array
         ]
@@ -673,9 +773,14 @@ class VolumeCropSequence(Sequence):
 
         if not debug__no_data_check:
             logger.debug("Checking values and labels consistency, this might be a bit slow.")
-            assert (data_max_val := np.max(self.data_volume, axis=None)) <= 1., f"{data_max_val=} > 1. Did you forget to normalize?"
-            assert (data_min_val := np.min(self.data_volume, axis=None)) >= 0., f"{data_min_val=} < 0. Did you forget to normalize?"
+            assert (data_max_val := np.max(self.data_volume, axis=None)) <= 1., \
+                f"{data_max_val=} > 1. Did you forget to normalize?"
+
+            assert (data_min_val := np.min(self.data_volume, axis=None)) >= 0., \
+                f"{data_min_val=} < 0. Did you forget to normalize?"
+
             assert all(lab in self.labels for lab in np.unique(self.labels_volume))
+
             logger.debug("Done.")
 
         assert self.batch_size >= 1
@@ -761,8 +866,3 @@ class VolumeCropSequence(Sequence):
                 labels_crop = labels_crop.reshape(*labels_crop.shape, 1)
             X[idx], y[idx] = data_crop, labels_crop
         return X, y
-
-    def get_clone(self, new_batch_size, new_epoch_size) -> "VolumeCropSequence":
-        raise NotImplementedError("todo reconstruct the random states here")
-        # noinspection PyArgumentList
-        return replace(self, **dict(batch_size=new_batch_size, epoch_size=new_epoch_size))
