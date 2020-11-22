@@ -48,11 +48,21 @@ class SetPartition(YAMLObject):
         return cls(**dic)
 
     def get_volume_partition(self, volume: ndarray) -> ndarray:
-        return volume[
-            self.x_range[0]:self.x_range[1],
-            self.y_range[0]:self.y_range[1],
-            self.z_range[0]:self.z_range[1],
-        ]
+        if volume.ndim == 3:
+            return volume[
+                self.x_range[0]:self.x_range[1],
+                self.y_range[0]:self.y_range[1],
+                self.z_range[0]:self.z_range[1],
+            ]
+        elif volume.ndim == 4:
+            return volume[
+               self.x_range[0]:self.x_range[1],
+               self.y_range[0]:self.y_range[1],
+               self.z_range[0]:self.z_range[1],
+               :
+            ]
+        else:
+            raise ValueError(f"{volume.ndim=}")
 
     @property
     def shape(self) -> Tuple[int, int, int]:

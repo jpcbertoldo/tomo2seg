@@ -1,4 +1,5 @@
 #
+import copy
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -7,6 +8,7 @@ from pathlib import Path
 from string import Template
 from typing import List, Optional, Union, Dict, Tuple
 
+import humanize
 from matplotlib import pyplot as plt
 from matplotlib.image import AxesImage
 from matplotlib.lines import Line2D
@@ -470,5 +472,215 @@ class SliceDataPredictionDisplay(Display):
         pred_axis.set_title("probability" + (f" class={self.class_name}" if self.class_name is not None else "") if self.is_probability else "prediction")
 
         fig.suptitle(f"Data/{'probability' if self.is_probability else 'prediction'} comparison on slice={self.slice_name}")
+
+        return self
+
+
+@dataclass
+class ClassImbalanceDisplay(Display):
+
+    volume_name: str
+    labels_idx: List[int]
+    labels_names: List[str]
+    labels_counts: List[int]
+    n_voxels: int = field(init=False)
+
+    def __post_init__(self):
+        self.n_voxels = 0
+        for c in self.labels_counts:
+            self.n_voxels += c
+
+    @property
+    def title(self) -> str:
+        return f"{self.volume_name}.class-imbalance"
+
+    def plot(self, ax=None) -> "Display":
+
+        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+
+        # noinspection PyShadowingNames
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        else:
+            assert isinstance(ax, Axes)
+            fig: Figure = ax.figure
+
+        self.axs_ = ax
+        self.fig_ = fig
+
+        self.plots_["barh"] = ax.barh(self.labels_idx, self.labels_counts)
+        ax.set_yticks(self.labels_idx)
+        ax.set_yticklabels([f"{self.labels_names[idx]} ({idx=})" for idx in self.labels_idx])
+        ax.set_xticks([])
+        for idx, count in zip(self.labels_idx, self.labels_counts):
+            self.plots_[f"text.label_idx={idx}"] = ax.text(
+                max(self.labels_counts) // 10, idx,
+                f"{humanize.intword(count)} "
+                f"({humanize.intcomma(count)}) = {(perc := count / self.n_voxels):.0%} ({perc:.4%})",
+                fontsize="large"
+            )
+
+        ax.set_title(f"Class imbalance of {self.volume_name}")
+
+        random_model_accu = max(self.labels_counts) / self.n_voxels
+        logger.info(f"The minimum accuracy is: {random_model_accu=:.2%}")
+
+        return self
+
+
+@dataclass
+class VoxelValueHistogramDisplay(Display):
+
+    volume_name: str
+    bins: list
+    values: list
+
+    ax_log_: Axes = field(init=False)
+
+    def __post_init__(self):
+        assert len(self.bins) == 256, f"{len(self.bins)=}"
+        assert len(self.values) == 256, f"{len(self.values)=}"
+        assert min(self.bins) == 0, f"{min(self.bins)=}"
+        assert max(self.bins) == 255, f"{max(self.bins)}"
+
+        # i want to get the vertical borders to show up
+        self.bins += [256, 257]
+        self.values = [0] + self.values + [0]
+
+    @property
+    def title(self) -> str:
+        return f"{self.volume_name}.voxel-value-histogram"
+
+    def plot(self, ax: Axes, y_linear_kwargs: dict = None, y_log_kwargs: dict = None) -> "VoxelValueHistogram":
+        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+
+        self.axs_ = ax
+        self.fig_ = ax.figure
+        self.ax_log_ = axlog = ax.twinx()
+
+        y_linear_kwargs = {
+            **dict(linewidth=.75, color='blue', label='linear',),
+            **(y_linear_kwargs or {}),
+        }
+        # noinspection PyArgumentList
+        self.plots_["y_linear"] = ax.step(self.bins, self.values, **y_linear_kwargs)
+        ax.set_xlim(-1, 257)
+        ax.set_xticks(np.linspace(0, 256, 256 // 8 + 1))  # multiples of 8
+        ax.set_xlabel("Voxel gray value [0, 255]")
+
+        ax.set_ylim((0, 1.05 * max(self.values)))
+        ax.set_ylabel("Proportion of voxels", color=y_linear_kwargs["color"], fontsize='large')
+        ax.set_yticks([])
+
+        y_log_kwargs = {
+            **dict(linewidth=.75, color='red', label='log',),
+            **(y_log_kwargs or {}),
+        }
+        # noinspection PyArgumentList
+        self.plots_["y_log"] = axlog.step(self.bins, self.values, **y_log_kwargs)
+        axlog.set_yscale("log")
+        axlog.grid(axis='y', which='major', ls='--', color=y_log_kwargs["color"], alpha=.5)
+        axlog.set_yticklabels(
+            [f"10^{int(np.log10(t)):d}" for t in axlog.get_yticks()],
+            c=y_log_kwargs["color"]
+        )
+        axlog.set_ylabel(
+            "Proportion of voxels (log scale)",
+            color=y_log_kwargs["color"],
+            fontsize='large',
+            rotation=-90,
+            rotation_mode="anchor"
+        )
+
+        ax.set_title(f"Volume data histogram\nvolume={self.volume_name}")
+
+        return self
+
+
+@dataclass
+class VoxelValueHistogramPerClassDisplay(Display):
+
+    volume_name: str
+    bins: list
+    values_per_label: List[list]
+    values_per_label_global_proportion: List[list]
+    labels_idx: List[int]
+    labels_names: List[str]
+
+    ax_per_label_: Axes = field(init=False)
+    ax_global_: Axes = field(init=False)
+
+    def __post_init__(self):
+        assert len(self.bins) == 256, f"{len(self.bins)=}"
+        assert min(self.bins) == 0, f"{min(self.bins)=}"
+        assert max(self.bins) == 255, f"{max(self.bins)}"
+
+        for idx in self.labels_idx:
+            assert (values_len := len(self.values_per_label[idx])) == 256, f"{values_len=} {idx=}"
+            assert (values_len := len(self.values_per_label_global_proportion[idx])) == 256, f"{values_len=} {idx=}"
+
+        # i want to get the vertical borders to show up
+        self.bins = copy.copy(self.bins) + [256, 257]
+        self.values_per_label = [
+            [0] + copy.copy(self.values_per_label[idx]) + [0]
+            for idx in self.labels_idx
+        ]
+        self.values_per_label_global_proportion = [
+            [0] + copy.copy(self.values_per_label_global_proportion[idx]) + [0]
+            for idx in self.labels_idx
+        ]
+
+    @property
+    def title(self) -> str:
+        return f"{self.volume_name}.data-histogram-per-label"
+
+    def plot(self, axs: ndarray) -> "VoxelValueHistogramPerClassDisplay":
+        assert (axs_shape := axs.shape) == (2,), f"{axs_shape=}"
+
+        self.ax_per_label_ = ax_per_label = axs[0]
+        self.ax_global_ = ax_global = axs[1]
+        self.fig_ = fig = ax_per_label.figure
+
+        assert isinstance(ax_per_label, Axes), f"{ax_per_label=}"
+        assert isinstance(ax_global, Axes), f"{ax_global=}"
+
+        for label_idx, label_name, label_hist, label_hist_global in zip(
+            self.labels_idx, self.labels_names, self.values_per_label, self.values_per_label_global_proportion
+        ):
+            self.plots_[f"per_label.{label_idx=}"] = ax_per_label.step(
+                self.bins,
+                label_hist,
+                linewidth=.75,
+                label=f"{label_name} ({label_idx=})",
+            )
+            ax_per_label.set_xlim(0, 256)
+            ax_per_label.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
+            ax_per_label.set_xlabel("Voxel gray value [0, 255]")
+
+            self.plots_[f"global.{label_idx=}"] = ax_global.step(
+                self.bins,
+                label_hist_global,
+                linewidth=.75,
+                label=f"{label_name} ({label_idx=})",
+            )
+            ax_global.set_xlim(0, 256)
+            ax_global.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
+            ax_global.set_xlabel("Voxel gray value [0, 255]")
+
+        ax_per_label.set_ybound(lower=0)
+        ax_per_label.set_ylabel("Proportion of voxels *per class*", fontsize='large')
+        ax_per_label.legend()
+        ax_per_label.set_title("Per class proportion\neach histogram is the proportion out of those of the same label")
+
+        ax_global.set_yscale('log')
+        ax_global.set_ybound(lower=0)
+        ax_global.set_ylabel("Proportion of voxels *overall* (global) [log]", fontsize='large')
+        ax_global.legend()
+        ax_global.set_title("Global proportion\neach histogram is the proportion out of all voxels")
+        ax_global.grid(axis='y', which='major', ls='--', alpha=.5)
+
+        fig.suptitle(f"Volume data histogram per class\nvolume={self.volume_name}")
 
         return self
