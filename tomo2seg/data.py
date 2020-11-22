@@ -301,6 +301,22 @@ class EstimationVolume(YAMLObject):
             yaml.dump(self, f, default_flow_style=False, indent=4)
 
     @property
+    def debug__crops_coordinates_path(self) -> Path:
+        return self.dir / f'{self.fullname}.debug.crops-coordinates.npy'
+
+    @property
+    def debug__crops_path(self) -> Path:
+        return self.dir / f"{self.fullname}.debug.crops.npy"
+
+    @property
+    def debug__crops_probas_path(self) -> Path:
+        return self.dir / f"{self.fullname}.debug.crops-probabilities.npy"
+
+    @property
+    def debug__crops_preds_path(self) -> Path:
+        return self.dir / f"{self.fullname}.debug.crops-predictions.npy"
+
+    @property
     def probabilities_path(self) -> Path:
         return self.dir / f"{self.fullname}.probabilities.npy"
 
