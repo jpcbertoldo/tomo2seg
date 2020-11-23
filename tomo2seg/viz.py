@@ -155,7 +155,7 @@ class TrainingHistoryDisplay(Display):
         time = 4
 
     history: Dict[str, List]
-    x_axis_mode: Optional[XAxisMode, str] = XAxisMode.epoch
+    x_axis_mode: Union[XAxisMode, str] = XAxisMode.epoch
     model_name: Optional[str] = None
     loss_name: Optional[str] = None
 
@@ -769,6 +769,7 @@ class ClassProbabilityHistogramDisplay(Display):
 
         for idx in self.labels_idx:
             assert (values_len := len(self.values_per_class[idx])) == 100, f"{values_len=} {idx=}"
+            assert np.isclose((sum_values := np.sum(self.values_per_class[idx])), 1, atol=.001), f"{sum_values=} {idx=}"
 
         # i want to get the vertical borders to show up
         self.bins = copy.copy(self.bins) + [1.001]
@@ -787,7 +788,6 @@ class ClassProbabilityHistogramDisplay(Display):
         self.fig_ = ax.figure
 
         for idx, name, values in zip(self.labels_idx, self.labels_names, self.values_per_class):
-
             self.plots_[f"proba_hist_{idx}"] = ax.step(
                 self.bins,
                 values,
@@ -817,3 +817,7 @@ class ClassProbabilityHistogramDisplay(Display):
         ax.legend(loc="upper center", fontsize="x-small", framealpha=1)
 
         return self
+
+
+# @dataclass
+# class
