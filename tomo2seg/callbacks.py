@@ -7,14 +7,18 @@ from tensorflow.keras.callbacks import History as KerasHistory
 from tensorflow.keras.optimizers import Optimizer
 from tensorflow.keras import backend as K
 
+from .volume_sequence import VolumeCropSequence
+
 
 class History(KerasHistory):
 
     def __init__(
         self,
+        crop_seq_train: VolumeCropSequence,
+        crop_seq_val: VolumeCropSequence,
         optimizer: Optional[Optimizer],
         backup: Optional[int] = None,
-        csv_path: Optional[Path] = None
+        csv_path: Optional[Path] = None,
     ):
         """
 
@@ -32,6 +36,8 @@ class History(KerasHistory):
         self.backup = backup
         self.csv_path = csv_path
         self.optimizer = optimizer
+        self.crop_seq_train = crop_seq_train
+        self.crop_seq_val = crop_seq_val
 
     @property
     def last_epoch(self) -> int:
@@ -43,6 +49,14 @@ class History(KerasHistory):
 
             if self.optimizer is not None:
                 other_logs["lr"] = K.eval(self.optimizer.lr)
+
+            other_logs["train.batch_size"] = self.crop_seq_train.batch_size
+            other_logs["train.epoch_size"] = self.crop_seq_train.epoch_size
+            other_logs["train.crop_shape"] = self.crop_seq_train.crop_shape
+
+            other_logs["val.batch_size"] = self.crop_seq_val.batch_size
+            other_logs["val.epoch_size"] = self.crop_seq_val.epoch_size
+            other_logs["val.crop_shape"] = self.crop_seq_val.crop_shape
 
             logs.update({
                 "epoch": epoch,
