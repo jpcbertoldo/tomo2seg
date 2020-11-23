@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -38,10 +39,15 @@ class History(KerasHistory):
         self.optimizer = optimizer
         self.crop_seq_train = crop_seq_train
         self.crop_seq_val = crop_seq_val
+        self.last_log_timestamp = None
 
     @property
     def last_epoch(self) -> int:
         return max(self.history.get("epoch", [0]))
+
+    def on_train_begin(self, logs=None):
+        super(History, self).on_train_begin(logs=logs)
+        self.last_log_timestamp = time.time()
 
     def on_epoch_end(self, epoch, logs=None):
         if logs is not None:
@@ -57,6 +63,10 @@ class History(KerasHistory):
             other_logs["val.batch_size"] = self.crop_seq_val.batch_size
             other_logs["val.epoch_size"] = self.crop_seq_val.epoch_size
             other_logs["val.crop_shape"] = self.crop_seq_val.crop_shape
+
+            now = time.time()
+            other_logs["seconds"] = now - self.last_log_timestamp
+            self.last_log_timestamp = now
 
             logs.update({
                 "epoch": epoch,

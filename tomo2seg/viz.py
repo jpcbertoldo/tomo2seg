@@ -224,7 +224,17 @@ class TrainingHistoryDisplay(Display):
                 x_axis = np.cumsum(epoch_size * batch_size * n_voxels)
 
             except KeyError as ex:
-                if ex.args[0] in ("train.epoch_size", "train.batch_size"):
+                if ex.args[0] in ("train.epoch_size", "train.batch_size", "train.crop_shape"):
+                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                raise ex
+
+        elif self.x_axis_mode == self.XAxisMode.time:
+            try:
+                seconds = self.history["seconds"]
+                x_axis = np.cumsum(seconds)
+
+            except KeyError as ex:
+                if ex.args[0] == "seconds":
                     logger.error(self._missing_signal_error_msg(ex.args[0], True))
                 raise ex
 
