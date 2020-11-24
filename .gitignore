@@ -130,16 +130,20 @@ dmypy.json
 .pyre/
 
 
-#data/*
-!data/**/*.yml
-!data/models/*/architecture.png
-!data/models/*/metadata.yml
-!data/models/*/summary.txt
-!data/models/*/logger.csv
-!data/models/*/history.csv
-!data/models/*/*training-history-plot*.
 data/*
+!data/models
+data/models/*.hdf5
+data/models/*
+!data/models/unet*/
+data/models/unet*/*
+!data/models/unet*/*.yml
+!data/models/unet*/*.png
+!data/models/unet*/logger.csv
+!data/models/unet*/history.csv
+!data/models/unet*/*.txt
+
 
 .idea/
 nbs/.archive/
 nbs/tutorials/
+
