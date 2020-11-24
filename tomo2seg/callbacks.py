@@ -7,6 +7,8 @@ from tensorflow.keras.callbacks import History as KerasHistory
 from tensorflow.keras.optimizers import Optimizer
 from tensorflow.keras import backend as K
 
+from .logger import logger
+
 
 class History(KerasHistory):
 
@@ -53,7 +55,8 @@ class History(KerasHistory):
 
         if self.backup is not None and (epoch % self.backup == self.backup - 1):
             # todo make this more efficient instead of recreating the whole thing every time
-            self.to_csv(self.csv_path)
+            logger.info(f"Saving backup of the training history {epoch=} {self.csv_path=}")
+            self.dataframe.to_csv(self.csv_path)
 
     @property
     def dataframe(self) -> pandas.DataFrame:

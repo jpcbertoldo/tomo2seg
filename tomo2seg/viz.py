@@ -278,7 +278,7 @@ class TrainingHistoryDisplay(Display):
         return self
 
 
-def mark_min_values(ax: Axes, plot: Line2D, fmt_x=".3g", fmt_y=".3g", with_txt=True) -> Union[Line2D, Tuple[Line2D, Text]]:
+def mark_min_values(ax: Axes, plot: Line2D, fmt_x=".3g", fmt_y=".3g", with_txt=True, txt_kwargs: dict = None) -> Union[Line2D, Tuple[Line2D, Text]]:
     xy = plot.get_xydata()
     argmin_y = int(np.argmin(xy[:, 1]))
     label = plot.get_label()
@@ -298,11 +298,14 @@ def mark_min_values(ax: Axes, plot: Line2D, fmt_x=".3g", fmt_y=".3g", with_txt=T
     )
 
     if with_txt:
+        txt_kwargs = {
+            **dict(fontdict=dict(rotation=60, color=color), rotation_mode='anchor'),
+            **(txt_kwargs or {}),
+        }
         txt = ax.text(
             x_argmin_y, ylim[1] / 2,
             f"min({label})\n(x={x_argmin_y:{fmt_x}}, y={min_y:{fmt_y}})",
-            fontdict=dict(rotation=60, color=color),
-            rotation_mode='anchor',
+            **txt_kwargs
         )
 
     ax.set_ylim(*ylim)
