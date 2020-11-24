@@ -214,10 +214,30 @@ class ProbabilityField3D(ABC):
     Each position of the volume has a probability distribution over the possible values.
     It supposes a regular grid of unitary steps in every axis.
     """
-    x_range: Tuple[int, int]
-    y_range: Tuple[int, int]
-    z_range: Tuple[int, int]
     random_state: Optional[RandomState]  # some concrete classes are deterministic
+
+    # they are None because they might be inferred from the grid position generator
+    # but if the latter is not given then the user must provide these
+    x_range: Optional[Tuple[int, int]] = None
+    y_range: Optional[Tuple[int, int]] = None
+    z_range: Optional[Tuple[int, int]] = None
+
+    grid_position_generator: InitVar[GridPositionGenerator] = None
+
+    def __post_init__(self, grid_position_generator: GridPositionGenerator):
+        if grid_position_generator is not None:
+            logger.warning(
+                f"Initializing {self.__class__.__name__} with a {grid_position_generator.__class__.__name__}.\n"
+                f"The {{x, y, z}}_range values will be overwritten."
+            )
+            self.x_range = grid_position_generator.x_range
+            self.y_range = grid_position_generator.y_range
+            self.z_range = grid_position_generator.z_range
+
+        else:
+            assert self.x_range is not None, f"{self.x_range=}"
+            assert self.y_range is not None, f"{self.y_range=}"
+            assert self.z_range is not None, f"{self.z_range=}"
 
     # noinspection PyArgumentList
     @classmethod
@@ -265,35 +285,27 @@ class ProbabilityField3D(ABC):
 @dataclass
 class GTConstantEverywhere(ProbabilityField3D):
 
-    gt: Union[GT2D, GT3D]
+    gt: Union[GT2D, GT3D] = GT3D.identity
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def _concrete_getitem(self, *_):
         return self.gt
-
-    @classmethod
-    def build(cls, gt, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            gt=gt,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_gt2d_identity(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(gt=GT2D.identity, **kwargs)
+        return cls(gt=GT2D.identity, **kwargs)
 
     @classmethod
     def build_gt3d_identity(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(gt=GT3D.identity, **kwargs)
+        return cls(gt=GT3D.identity, **kwargs)
 
 
 @dataclass
 class GTUniformEverywhere(ProbabilityField3D):
 
-    gt_type: Type  # GT2D or GT3D
+    gt_type: Type = GT3D  # GT2D or GT3D
 
     def _concrete_getitem(self, x: int, y: int, z: int):
         """
@@ -313,7 +325,7 @@ class GTUniformEverywhere(ProbabilityField3D):
     @classmethod
     def build_2d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls._build(
+        return cls(
             *args,
             gt_type=GT2D,
             **kwargs,
@@ -322,7 +334,7 @@ class GTUniformEverywhere(ProbabilityField3D):
     @classmethod
     def build_3d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls._build(
+        return cls(
             *args,
             gt_type=GT3D,
             **kwargs,
@@ -333,24 +345,45 @@ class GTUniformEverywhere(ProbabilityField3D):
 class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
-    shift: float  # shift on the normalized range [0, 1]
+    shift: float = 0.  # shift on the normalized range [0, 1]
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def __post_init__(self, *args, **kwargs):
+        super(VSConstantEverywhere, self).__post_init__(*args, **kwargs)
+        assert -1 < self.shift < 1, f"{self.shift=}"
+
+    def _concrete_getitem(self, *_):
         return self.shift
-
-    @classmethod
-    def build(cls, shift, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            shift=shift,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_no_shift(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(shift=0., **kwargs)
+        return cls(shift=0., **kwargs)
+
+
+@dataclass
+class VSUniformEverywhere(ProbabilityField3D):
+    """Values shift is a random value in a uniform interval [shift_min, shift_max] everywhere."""
+
+    shift_min: float = 0.  # shifts on the normalized range [0, 1]
+    shift_max: float = 0.
+
+    def __post_init__(self, *args, **kwargs):
+        super(VSUniformEverywhere, self).__post_init__(*args, **kwargs)
+        assert -1 < self.shift_min < 1, f"{self.shift_min=}"
+        assert -1 < self.shift_max < 1, f"{self.shift_max=}"
+        assert self.shift_min < self.shift_max, f"{self.shift_min=} {self.shift_max=}"
+
+    def _concrete_getitem(self, *_):
+        return self.random_state.uniform(
+            low=self.shift_min,
+            high=self.shift_max,
+            size=None,  # scalar is returned
+        )
+
+    @classmethod
+    def build_plus_or_mines(cls, shift: float, **kwargs):
+        return cls(shift_min=-shift, shift_max=shift, **kwargs)
 
 
 def uniform_cuboid(
@@ -381,24 +414,16 @@ def uniform_cuboid(
 @dataclass
 class ET3DConstantEverywhere(ProbabilityField3D):
 
-    displacement: Optional[ET]
+    displacement: Optional[ET] = None
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def _concrete_getitem(self, *_):
         return self.displacement
-
-    @classmethod
-    def build(cls, displacement, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            displacement=displacement,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_no_displacement(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(displacement=None, **kwargs)
+        return cls(displacement=None, **kwargs)
 
 
 @dataclass
@@ -414,31 +439,39 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
     cuboid_size[i] = crop_shape[i] * elastic_param
     """
 
-    elastic_param: InitVar[Union[float, Tuple[float, float, float]]]
-
-    crop_shape: Tuple[int, int, int]
-    cuboid_shape: Tuple[float, float, float] = field(init=False)
-
-    # the limits of the data grid, i.e. the elastic crop cannot go outside of this range
-    crop_xlim: Tuple[int, int]
-    crop_ylim: Tuple[int, int]
-    crop_zlim: Tuple[int, int]
+    crop_shape: Tuple[int, int, int] = None
+    cuboid_shape: Tuple[float, float, float] = None
 
     spline_order: int = 3  # default copied from etienne's code
 
-    def __post_init__(self, elastic_param):
-        if isinstance(elastic_param, float):
-            # cuboids proportional to the crop's size on each axis
-            self.cuboid_shape = (
-                elastic_param * self.crop_shape[0],
-                elastic_param * self.crop_shape[1],
-                elastic_param * self.crop_shape[2],
+    # the limits of the data grid, i.e. the elastic crop cannot go outside of this range
+    # if crop_source_volume_shape is given, these will be overwritten assuming
+    # limits [0, shape[idx]] (i.e. the whole volume)
+    crop_xlim: Optional[Tuple[int, int]] = None
+    crop_ylim: Optional[Tuple[int, int]] = None
+    crop_zlim: Optional[Tuple[int, int]] = None
+    crop_source_volume_shape: InitVar[Optional[Tuple[int, int, int]]] = None
+
+    def __post_init__(self, *args, **kwargs):
+        args, crop_source_volume_shape = args[:-1], args[-1]
+        super(ET3DUniformCuboidAlmostEverywhere, self).__post_init__(*args, **kwargs)
+
+        if crop_source_volume_shape is not None:
+            logger.warning(
+                f"Initializing {self.__class__.__name__} with a {crop_source_volume_shape=}.\n"
+                f"The crop_{{x, y, z}}lim values will be overwritten with (0, crop_source_volume_shape[{{0, 1, 2}}])."
             )
-        elif isinstance(elastic_param, tuple):
-            # cuboid shape given
-            self.cuboid_shape = elastic_param
+            self.crop_xlim = (0, crop_source_volume_shape[0])
+            self.crop_ylim = (0, crop_source_volume_shape[1])
+            self.crop_zlim = (0, crop_source_volume_shape[2])
         else:
-            raise ValueError()
+            assert self.crop_xlim is not None, f"{self.crop_xlim=}"
+            assert self.crop_ylim is not None, f"{self.crop_ylim=}"
+            assert self.crop_zlim is not None, f"{self.crop_zlim=}"
+
+        # i have to do this because i cannot have non-default attributes
+        assert self.cuboid_shape is not None
+        assert self.crop_shape is not None
 
     def _concrete_getitem(self, x0: int, y0: int, z0: int) -> ET:
         """(x0, y0, z0) is the 000 corner of a 3D crop. todo make this batch-enabled!"""
@@ -482,21 +515,13 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
         return ET(**displacements)
 
     @classmethod
-    def build_half_voxel_cuboid(cls, crop_shape, crop_xlim, crop_ylim, crop_zlim, spline_order, **kwargs):
+    def build_half_voxel_cuboid(cls, *args, **kwargs):
         """
         Each voxel's probability cuboid is of the size of a voxel (half to each direction)
         in all the axes, so there is no overlap between each voxel's domain.
         """
         # noinspection PyArgumentList
-        return cls._build(
-            elastic_param=(.5, .5, .5),
-            crop_shape=crop_shape,
-            crop_xlim=crop_xlim,
-            crop_ylim=crop_ylim,
-            crop_zlim=crop_zlim,
-            spline_order=spline_order,
-            **kwargs,
-        )
+        return cls(*args, cuboid_shape=(.5, .5, .5), **kwargs)
 
 
 @dataclass
