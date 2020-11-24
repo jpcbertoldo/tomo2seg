@@ -71,3 +71,7 @@ class Model:
     @property
     def metadata_yml_path(self) -> Path:
         return self.model_path / "metadata.yml"
+
+    @property
+    def train_metacrop_history_path(self) -> Path:
+        return self.model_path / "metacrop-history.csv"

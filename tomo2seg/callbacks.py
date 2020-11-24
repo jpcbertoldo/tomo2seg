@@ -69,10 +69,11 @@ class History(KerasHistory):
             other_logs["seconds"] = now - self.last_log_timestamp
             self.last_log_timestamp = now
 
-            logs.update({
+            logs = {
+                **logs,
                 "epoch": epoch,
                 **other_logs,
-            })
+            }
 
         super().on_epoch_end(epoch, logs=logs)
 
@@ -83,4 +84,6 @@ class History(KerasHistory):
 
     @property
     def dataframe(self) -> pandas.DataFrame:
+        if len(self.history) == 0:
+            return pandas.DataFrame()
         return pandas.DataFrame(self.history).set_index("epoch")

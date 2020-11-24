@@ -62,14 +62,13 @@ class LogSpaceSchedule(Schedule):
 
     def __post_init__(self):
         n = (self.n_between_scales + 1) * abs(self.stop - self.start) + 1
-        logger.debug(f"{n=}")
 
         schedule = np.concatenate([
             np.array(self.wait * [10 ** self.start]), 
             np.logspace(self.start, self.stop, n)
         ]).tolist()
         self.schedule_ = schedule
-        logger.info(f"{self.n=}")
+        logger.info(f"{self.__class__.__name__} ==> {self.n=}")
 
     @property
     def n(self) -> int:
@@ -89,11 +88,12 @@ class ComposedSchedule(Schedule):
     last_scheduled_epoch_: int = field(init=False)
 
     def __post_init__(self):
+
+        self.epoch_mapping_ = {}
+
         for sched_idx, (sched, sched_after) in enumerate(zip(
                 self.sub_schedules, self.sub_schedules[1:] + [None]  # none = "after the last schedule"
         )):
-            # make sure it won't be counted twice
-            sched.offset_epoch = 0
 
             if sched_after is not None:
                 assert sched.range[1] == sched_after.range[0], f"{sched_idx=} {sched.range} {sched_after.range}"
@@ -104,13 +104,14 @@ class ComposedSchedule(Schedule):
             if sched_after is None:
                 self.last_scheduled_epoch_ = epoch
 
+        logger.info(f"{self.__class__.__name__} ==> {self.n=}")
+
     @property
     def n(self) -> int:
         return sum(sched.n for sched in self.sub_schedules)
 
     def __call__(self, epoch) -> float:
         assert epoch >= self.offset_epoch, f"{epoch=} {self.offset_epoch=}"
-        epoch -= self.offset_epoch
 
         if epoch > self.last_scheduled_epoch_:
             return self.sub_schedules[-1](epoch)

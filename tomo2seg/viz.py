@@ -199,6 +199,7 @@ class TrainingHistoryDisplay(Display):
 
             except KeyError as ex:
                 if ex.args[0] == "train.epoch_size":
+                    # todo replace by logger.exception
                     logger.error(self._missing_signal_error_msg(ex.args[0], True))
                 raise ex
 

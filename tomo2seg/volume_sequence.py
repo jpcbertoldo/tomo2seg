@@ -113,7 +113,7 @@ class GridPositionGenerator(ABC):
 
     def __post_init__(self):
         assert all(range_[0] <= range_[1] for range_ in self.axes_ranges)
-    
+
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
         return self.x_range, self.y_range, self.z_range
@@ -193,13 +193,17 @@ class SequentialGridPosition(GridPositionGenerator):
         return positions
 
     @classmethod
-    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]):
+    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int], **n_steps_kwargs):
         n_steps = dict(
             n_steps_x=int(np.ceil(volume_shape[0] / crop_shape[0])),
             n_steps_y=int(np.ceil(volume_shape[1] / crop_shape[1])),
             n_steps_z=int(np.ceil(volume_shape[2] / crop_shape[2])),
         )
         logger.info(f"Building {cls.__name__} with minimal overlap (smallest n_steps in each directions) {n_steps=}.")
+        if len(n_steps_kwargs) > 0:
+            n_steps = {**n_steps, **n_steps_kwargs}
+            logger.warning(f"{n_steps_kwargs=} was given --> effective {n_steps=}")
+
         # noinspection PyArgumentList
         return cls.build_from_volume_crop_shapes(
             volume_shape=volume_shape,
@@ -214,10 +218,30 @@ class ProbabilityField3D(ABC):
     Each position of the volume has a probability distribution over the possible values.
     It supposes a regular grid of unitary steps in every axis.
     """
-    x_range: Tuple[int, int]
-    y_range: Tuple[int, int]
-    z_range: Tuple[int, int]
     random_state: Optional[RandomState]  # some concrete classes are deterministic
+
+    # they are None because they might be inferred from the grid position generator
+    # but if the latter is not given then the user must provide these
+    x_range: Optional[Tuple[int, int]] = None
+    y_range: Optional[Tuple[int, int]] = None
+    z_range: Optional[Tuple[int, int]] = None
+
+    grid_position_generator: InitVar[GridPositionGenerator] = None
+
+    def __post_init__(self, grid_position_generator: GridPositionGenerator):
+        if grid_position_generator is not None:
+            logger.warning(
+                f"Initializing {self.__class__.__name__} with a {grid_position_generator.__class__.__name__}.\n"
+                f"The {{x, y, z}}_range values will be overwritten."
+            )
+            self.x_range = grid_position_generator.x_range
+            self.y_range = grid_position_generator.y_range
+            self.z_range = grid_position_generator.z_range
+
+        else:
+            assert self.x_range is not None, f"{self.x_range=}"
+            assert self.y_range is not None, f"{self.y_range=}"
+            assert self.z_range is not None, f"{self.z_range=}"
 
     # noinspection PyArgumentList
     @classmethod
@@ -265,35 +289,27 @@ class ProbabilityField3D(ABC):
 @dataclass
 class GTConstantEverywhere(ProbabilityField3D):
 
-    gt: Union[GT2D, GT3D]
+    gt: Union[GT2D, GT3D] = GT3D.identity
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def _concrete_getitem(self, *_):
         return self.gt
-
-    @classmethod
-    def build(cls, gt, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            gt=gt,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_gt2d_identity(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(gt=GT2D.identity, **kwargs)
+        return cls(gt=GT2D.identity, **kwargs)
 
     @classmethod
     def build_gt3d_identity(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(gt=GT3D.identity, **kwargs)
+        return cls(gt=GT3D.identity, **kwargs)
 
 
 @dataclass
 class GTUniformEverywhere(ProbabilityField3D):
 
-    gt_type: Type  # GT2D or GT3D
+    gt_type: Type = GT3D  # GT2D or GT3D
 
     def _concrete_getitem(self, x: int, y: int, z: int):
         """
@@ -313,7 +329,7 @@ class GTUniformEverywhere(ProbabilityField3D):
     @classmethod
     def build_2d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls._build(
+        return cls(
             *args,
             gt_type=GT2D,
             **kwargs,
@@ -322,7 +338,7 @@ class GTUniformEverywhere(ProbabilityField3D):
     @classmethod
     def build_3d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls._build(
+        return cls(
             *args,
             gt_type=GT3D,
             **kwargs,
@@ -333,24 +349,45 @@ class GTUniformEverywhere(ProbabilityField3D):
 class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
-    shift: float  # shift on the normalized range [0, 1]
+    shift: float = 0.  # shift on the normalized range [0, 1]
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def __post_init__(self, *args, **kwargs):
+        super(VSConstantEverywhere, self).__post_init__(*args, **kwargs)
+        assert -1 < self.shift < 1, f"{self.shift=}"
+
+    def _concrete_getitem(self, *_):
         return self.shift
-
-    @classmethod
-    def build(cls, shift, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            shift=shift,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_no_shift(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(shift=0., **kwargs)
+        return cls(shift=0., **kwargs)
+
+
+@dataclass
+class VSUniformEverywhere(ProbabilityField3D):
+    """Values shift is a random value in a uniform interval [shift_min, shift_max] everywhere."""
+
+    shift_min: float = 0.  # shifts on the normalized range [0, 1]
+    shift_max: float = 0.
+
+    def __post_init__(self, *args, **kwargs):
+        super(VSUniformEverywhere, self).__post_init__(*args, **kwargs)
+        assert -1 < self.shift_min < 1, f"{self.shift_min=}"
+        assert -1 < self.shift_max < 1, f"{self.shift_max=}"
+        assert self.shift_min < self.shift_max, f"{self.shift_min=} {self.shift_max=}"
+
+    def _concrete_getitem(self, *_):
+        return self.random_state.uniform(
+            low=self.shift_min,
+            high=self.shift_max,
+            size=None,  # scalar is returned
+        )
+
+    @classmethod
+    def build_plus_or_mines(cls, shift: float, **kwargs):
+        return cls(shift_min=-shift, shift_max=shift, **kwargs)
 
 
 def uniform_cuboid(
@@ -381,24 +418,16 @@ def uniform_cuboid(
 @dataclass
 class ET3DConstantEverywhere(ProbabilityField3D):
 
-    displacement: Optional[ET]
+    displacement: Optional[ET] = None
+    random_state: Optional[RandomState] = None
 
-    def _concrete_getitem(self, x: int, y: int, z: int):
+    def _concrete_getitem(self, *_):
         return self.displacement
-
-    @classmethod
-    def build(cls, displacement, **kwargs):
-        # noinspection PyArgumentList
-        return cls._build(
-            displacement=displacement,
-            random_state=None,
-            **kwargs,
-        )
 
     @classmethod
     def build_no_displacement(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls.build(displacement=None, **kwargs)
+        return cls(displacement=None, **kwargs)
 
 
 @dataclass
@@ -414,31 +443,39 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
     cuboid_size[i] = crop_shape[i] * elastic_param
     """
 
-    elastic_param: InitVar[Union[float, Tuple[float, float, float]]]
-
-    crop_shape: Tuple[int, int, int]
-    cuboid_shape: Tuple[float, float, float] = field(init=False)
-
-    # the limits of the data grid, i.e. the elastic crop cannot go outside of this range
-    crop_xlim: Tuple[int, int]
-    crop_ylim: Tuple[int, int]
-    crop_zlim: Tuple[int, int]
+    crop_shape: Tuple[int, int, int] = None
+    cuboid_shape: Tuple[float, float, float] = None
 
     spline_order: int = 3  # default copied from etienne's code
 
-    def __post_init__(self, elastic_param):
-        if isinstance(elastic_param, float):
-            # cuboids proportional to the crop's size on each axis
-            self.cuboid_shape = (
-                elastic_param * self.crop_shape[0],
-                elastic_param * self.crop_shape[1],
-                elastic_param * self.crop_shape[2],
+    # the limits of the data grid, i.e. the elastic crop cannot go outside of this range
+    # if crop_source_volume_shape is given, these will be overwritten assuming
+    # limits [0, shape[idx]] (i.e. the whole volume)
+    crop_xlim: Optional[Tuple[int, int]] = None
+    crop_ylim: Optional[Tuple[int, int]] = None
+    crop_zlim: Optional[Tuple[int, int]] = None
+    crop_source_volume_shape: InitVar[Optional[Tuple[int, int, int]]] = None
+
+    def __post_init__(self, *args, **kwargs):
+        args, crop_source_volume_shape = args[:-1], args[-1]
+        super(ET3DUniformCuboidAlmostEverywhere, self).__post_init__(*args, **kwargs)
+
+        if crop_source_volume_shape is not None:
+            logger.warning(
+                f"Initializing {self.__class__.__name__} with a {crop_source_volume_shape=}.\n"
+                f"The crop_{{x, y, z}}lim values will be overwritten with (0, crop_source_volume_shape[{{0, 1, 2}}])."
             )
-        elif isinstance(elastic_param, tuple):
-            # cuboid shape given
-            self.cuboid_shape = elastic_param
+            self.crop_xlim = (0, crop_source_volume_shape[0])
+            self.crop_ylim = (0, crop_source_volume_shape[1])
+            self.crop_zlim = (0, crop_source_volume_shape[2])
         else:
-            raise ValueError()
+            assert self.crop_xlim is not None, f"{self.crop_xlim=}"
+            assert self.crop_ylim is not None, f"{self.crop_ylim=}"
+            assert self.crop_zlim is not None, f"{self.crop_zlim=}"
+
+        # i have to do this because i cannot have non-default attributes
+        assert self.cuboid_shape is not None
+        assert self.crop_shape is not None
 
     def _concrete_getitem(self, x0: int, y0: int, z0: int) -> ET:
         """(x0, y0, z0) is the 000 corner of a 3D crop. todo make this batch-enabled!"""
@@ -482,26 +519,18 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
         return ET(**displacements)
 
     @classmethod
-    def build_half_voxel_cuboid(cls, crop_shape, crop_xlim, crop_ylim, crop_zlim, spline_order, **kwargs):
+    def build_half_voxel_cuboid(cls, *args, **kwargs):
         """
         Each voxel's probability cuboid is of the size of a voxel (half to each direction)
         in all the axes, so there is no overlap between each voxel's domain.
         """
         # noinspection PyArgumentList
-        return cls._build(
-            elastic_param=(.5, .5, .5),
-            crop_shape=crop_shape,
-            crop_xlim=crop_xlim,
-            crop_ylim=crop_ylim,
-            crop_zlim=crop_zlim,
-            spline_order=spline_order,
-            **kwargs,
-        )
+        return cls(*args, cuboid_shape=(.5, .5, .5), **kwargs)
 
 
 @dataclass
 class MetaCrop3D:
-    csv_header: ClassVar[str] = "x,y,z,elastic_transformation,geometric_transformation,value_shift"
+    csv_header: ClassVar[str] = "x,y,z,et,gt_type,gt,vs"
 
     x: slice
     y: slice
@@ -516,6 +545,7 @@ class MetaCrop3D:
 
     @property
     def shape(self) -> Tuple[int, int, int]:
+        # noinspection PyTypeChecker
         return tuple(
             axis.stop - axis.start
             for axis in self.slice
@@ -532,9 +562,10 @@ class MetaCrop3D:
         )
 
     def get_et_corner_coords(self,  x_: int, y_: int, z_: int) -> Tuple[float, float, float]:
-        assert x_ in (0, 1)
-        assert y_ in (0, 1)
-        assert z_ in (0, 1)
+        assert x_ in (0, 1), f"{x_=}"
+        assert y_ in (0, 1), f"{y_=}"
+        assert z_ in (0, 1), f"{z_=}"
+        # noinspection PyTypeChecker
         return tuple(
             coord + displacement
             for coord, displacement in zip(
@@ -552,11 +583,16 @@ class MetaCrop3D:
         )
 
     @property
+    def flat_axis(self) -> int:
+        assert self.is2d, f"{self.is2d=} {self.shape=}"
+        return [idx for idx in range(3) if self.is2d_on(idx)][0]
+
+    @property
     def is2d(self):
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
-        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.value},{self.vs}"
+        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs}"
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -594,18 +630,19 @@ def meta2crop(
     if meta_crop.et is None:
         crop = volume[meta_crop.slice].copy()
     else:
-        corners_binaries = list(product((0, 1), (0, 1), (0, 1)))
+        xbin = (0,) if meta_crop.is2d_on(0) else (0, 1)
+        ybin = (0,) if meta_crop.is2d_on(1) else (0, 1)
+        zbin = (0,) if meta_crop.is2d_on(2) else (0, 1)
+        corners_binaries = list(product(xbin, ybin, zbin))
 
         ijk_grid_corners = np.array([
             [
-                0 if ci_ == 0 else meta_crop.shape[0] - 1,
-                0 if cj_ == 0 else meta_crop.shape[1] - 1,
-                0 if ck_ == 0 else meta_crop.shape[2] - 1,
+                0 if c == 0 else s - 1
+                for c, s in zip(corner, meta_crop.shape)
             ]
-            for ci_, cj_, ck_ in corners_binaries
-        ])  # 8 x 3
+            for corner in corners_binaries
+        ])  # 4x3 or 8x3
 
-        # n_grid_points = (meta_crop.shape[0] * meta_crop.shape[1] * meta_crop.shape[2])
         ijk_grid_points = np.array(list(product(
             np.arange(meta_crop.shape[0]),
             np.arange(meta_crop.shape[1]),
@@ -615,7 +652,15 @@ def meta2crop(
         et_grid_corner_coords = np.array([
             meta_crop.get_et_corner_coords(ci_, cj_, ck_)
             for ci_, cj_, ck_ in corners_binaries
-        ])  # 8 x 3
+        ])  # 4x3 or 8x3
+
+        if meta_crop.is2d:
+            axes = [0, 1, 2]
+            axes.pop(meta_crop.flat_axis)
+            ijk_grid_corners = ijk_grid_corners[:, axes]
+            ijk_grid_points = ijk_grid_points[:, axes]
+            et_grid_corner_coords = et_grid_corner_coords[:, axes]
+            # et_grid_corner_coords[:, meta_crop.flat_axis] = meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis]
 
         def get_et_grid_coords(axis):
             return sp.interpolate.griddata(
@@ -626,14 +671,19 @@ def meta2crop(
             )  # n_grid_points x 1
 
         et_grid_coords = np.stack(
-            [get_et_grid_coords(dim) for dim in range(3)], axis=-1
+            [
+                meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis] * np.ones(ijk_grid_points.shape[0])
+                if meta_crop.is2d_on(dim) else
+                get_et_grid_coords(dim)
+                for dim in range(3)
+            ], axis=-1
         )  # n_grid_points x 3
 
         if interpolation == "spline":
             # todo test if t will be too slow cuz it might do a spline for the entire volume (?)
             crop = map_coordinates(
                 input=volume,
-                coordinates=et_grid_coords,
+                coordinates=et_grid_coords.T,
                 # todo check how this works, can it break it order=3 and the crop is in the corner?
                 # todo visualize the effect with crops at the borders because this will search for 3rd order derivatives
                 order=spline_order,
@@ -642,7 +692,7 @@ def meta2crop(
         elif interpolation == "nearest":
             # todo keep this somewhere to avoid generating?
             crop = sp.interpolate.interpn(
-                points=(
+                points=list(
                     np.arange(volume.shape[dim])
                     for dim in range(3)
                 ),
@@ -658,21 +708,23 @@ def meta2crop(
     # geometric_transformation
     if meta_crop.is2d:
         func = _GT2D_VAL2FUNC[meta_crop.gt.value]
-
-        if meta_crop.is2d_on(0):
-            sx = crop.shape[1]
-            sy = crop.shape[2]
-            crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
-        elif meta_crop.is2d_on(1):
-            sx = crop.shape[0]
-            sy = crop.shape[2]
-            crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
-        else:
-            sx = crop.shape[0]
-            sy = crop.shape[1]
-            crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
     else:
-        pass
+        raise NotImplementedError(f"Please implement {GT3D.__name__} transformations.")
+
+    if meta_crop.is2d_on(0):
+        sx = crop.shape[1]
+        sy = crop.shape[2]
+        crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
+    elif meta_crop.is2d_on(1):
+        sx = crop.shape[0]
+        sy = crop.shape[2]
+        crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
+    elif meta_crop.is2d_on(2):
+        sx = crop.shape[0]
+        sy = crop.shape[1]
+        crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
+    else:
+        crop = func(crop)
 
     if is_label:
         return crop.astype(int)
@@ -753,6 +805,7 @@ class VolumeCropSequence(Sequence):
     meta_crops_hist_buffer: List[List[MetaCrop3D]] = field(init=False)
     meta_crops_hist_path: Optional[Path] = None
 
+    output_as_2d: bool = False
     use_labels_ohe: bool = False
     debug__no_data_check: InitVar[bool] = False
 
@@ -836,33 +889,63 @@ class VolumeCropSequence(Sequence):
         self.meta_crops_hist_buffer.append(batch_meta_crops)
 
         # Initialization
-        X = np.empty(
-            (
+
+        n_classes = len(self.labels)
+
+        if self.output_as_2d:
+            target_x_shape = (
+                self.batch_size,
+                self.crop_shape[0],
+                self.crop_shape[1],
+                1  # mono-channel for now todo make it multichannel
+            )
+            target_y_shape = tuple(
+                [
+                    self.batch_size,
+                    self.crop_shape[0],
+                    self.crop_shape[1],
+                ] + self.use_labels_ohe * [n_classes]
+            )
+
+        else:  # 3d might it be (:
+            target_x_shape = (
                 self.batch_size,
                 self.crop_shape[0],
                 self.crop_shape[1],
                 self.crop_shape[2],
-                # mono-channel for now todo make it multichannel
-            ),
-            dtype=np.float
-        )
-        y = np.empty(
-            (
-                self.batch_size,
-                self.crop_shape[0],
-                self.crop_shape[1],
-                self.crop_shape[2],
-                len(self.labels) if self.use_labels_ohe else 1,
-            ),
-            dtype=np.uint8
-        )
+                1  # mono-channel for now todo make it multichannel
+            )
+            target_y_shape = tuple(
+                [
+                    self.batch_size,
+                    self.crop_shape[0],
+                    self.crop_shape[1],
+                    self.crop_shape[2],
+                ] + self.use_labels_ohe * [n_classes]
+            )
+
+        X = np.empty(target_x_shape, dtype=np.float)
+        y = np.empty(target_y_shape, dtype=np.uint8)
 
         for idx, meta_crop in enumerate(batch_meta_crops):
+
             data_crop = self.meta2data(meta_crop)
             labels_crop = self.meta2labels(meta_crop)
+
+            # make it 2d if that's the case
+            if self.output_as_2d:
+                data_crop, labels_crop = (
+                    (data_crop[:, :, 0], labels_crop[:, :, 0]) if meta_crop.is2d_on(2) else
+                    (data_crop[:, 0, :], labels_crop[:, 0, :]) if meta_crop.is2d_on(1) else
+                    (data_crop[0, :, :], labels_crop[0, :, :]) if meta_crop.is2d_on(0) else
+                    (data_crop, labels_crop)
+                )
+
             if self.use_labels_ohe:
-                labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
-            else:
-                labels_crop = labels_crop.reshape(*labels_crop.shape, 1)
-            X[idx], y[idx] = data_crop, labels_crop
+                raise NotImplementedError()  # the function here below needs to be revised
+                # labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
+
+            X[idx] = data_crop.reshape(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
+            y[idx] = labels_crop
+
         return X, y
