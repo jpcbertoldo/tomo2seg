@@ -142,7 +142,6 @@ data/models/unet*/*
 !data/models/unet*/history.csv
 !data/models/unet*/*.txt
 
-
 .idea/
 nbs/.archive/
 nbs/tutorials/
