@@ -4,6 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from string import Template
 from typing import List, Optional, Union, Dict, Tuple
@@ -118,7 +119,7 @@ class Display(ABC):
     creation_time: int = field(init=False, default_factory=lambda: int(time.time()))
 
     @abstractmethod
-    def plot(self) -> "Display":
+    def plot(self, *args, **kwargs) -> "Display":
         pass
 
     @property
@@ -146,117 +147,184 @@ class Display(ABC):
 class TrainingHistoryDisplay(Display):
     """Structured inspired in `sklearn.metrics.RocCurveDisplay`"""
 
+    class XAxisMode(Enum):
+        epoch = 0
+        batch = 1
+        crop = 2
+        voxel = 3
+        time = 4
+
     history: Dict[str, List]
+    x_axis_mode: Union[XAxisMode, str] = XAxisMode.epoch
     model_name: Optional[str] = None
     loss_name: Optional[str] = None
 
+    x_axis_: ndarray = field(init=False)
+
     # not arguments
-    ax_loss_: Axes = field(init=False)
+    axs_metrics_: List[Axes] = field(init=False)
     ax_lr_: Axes = field(init=False)
+
+    def _missing_signal_error_msg(self, key: str, keys=False) -> str:
+        msg = f"The history dict given to {self.__class__.__name__} does not have {key=}."
+        if keys:
+            msg += f"\n{list(self.history.keys())=}"
+        return msg
+
+    def __post_init__(self):
+        mode = self.x_axis_mode
+        self.x_axis_mode = self.XAxisMode[mode] if isinstance(mode, str) else mode
+
+        if self.x_axis_mode == self.XAxisMode.epoch:
+            try:
+                x_axis = self.history["epoch"]
+
+            except KeyError as ex:
+
+                if ex.args[0] != "epoch":
+                    raise ex
+
+                n_epochs = len(self.history["loss"])
+
+                logger.warning(
+                    f"{self._missing_signal_error_msg(ex.args[0], False)}\n"
+                    f"Using a default sequence (0, 1, ..., {n_epochs - 1=})"
+                )
+                x_axis = np.arange(0, n_epochs)
+
+        elif self.x_axis_mode == self.XAxisMode.batch:
+            try:
+                epoch_size = self.history["train.epoch_size"]
+                x_axis = np.cumsum(epoch_size)
+
+            except KeyError as ex:
+                if ex.args[0] == "train.epoch_size":
+                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                raise ex
+
+        elif self.x_axis_mode == self.XAxisMode.crop:
+            try:
+                epoch_size = np.array(self.history["train.epoch_size"])
+                batch_size = np.array(self.history["train.batch_size"])
+                x_axis = np.cumsum(epoch_size * batch_size)
+
+            except KeyError as ex:
+                if ex.args[0] in ("train.epoch_size", "train.batch_size"):
+                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                raise ex
+
+        elif self.x_axis_mode == self.XAxisMode.voxel:
+            try:
+                epoch_size = np.array(self.history["train.epoch_size"])
+                batch_size = np.array(self.history["train.batch_size"])
+                n_voxels = np.array([
+                    shape[0] * shape[1] * shape[2]
+                    for shape in self.history["train.crop_shape"]
+                ])
+                x_axis = np.cumsum(epoch_size * batch_size * n_voxels)
+
+            except KeyError as ex:
+                if ex.args[0] in ("train.epoch_size", "train.batch_size", "train.crop_shape"):
+                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                raise ex
+
+        elif self.x_axis_mode == self.XAxisMode.time:
+            try:
+                seconds = self.history["seconds"]
+                x_axis = np.cumsum(seconds)
+
+            except KeyError as ex:
+                if ex.args[0] == "seconds":
+                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                raise ex
+
+        else:
+            raise NotImplementedError(f"{self.x_axis_mode=}")
+
+        assert len(x_axis) > 1, "You don't have enough epochs to plot. Go to the gym and call me later."
+
+        self.x_axis_ = x_axis
 
     @property
     def title(self) -> str:
-        return (self.model_name or "unknown-model") + ".training-history-plot"
+        x_axis = self.x_axis_mode.name
+        return (self.model_name or "unknown-model") + f".training-history-plot.{x_axis=}"
 
     def plot(
         self,
-        axs=None,
+        axs: ndarray,
+        metrics: Tuple[str] = ("loss",),
         with_lr: bool = False,
-        loss_kwargs: dict = None,
-        val_loss_kwargs: dict = None,
+        metric_kwargs: dict = None,
+        val_metric_kwargs: dict = None,
         lr_kwargs: dict = None
     ) -> "TrainingHistoryDisplay":
         check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
 
-        # noinspection PyShadowingNames
-        import matplotlib.pyplot as plt
+        n_necessary_axes = len(metrics) + int(with_lr)
 
-        def _missing_signal_error_msg(key: str, keys=False) -> str:
-            msg = f"The history dict given to {this_func_name} does not have the *{key}*."
-            if keys:
-                msg += f"\n{list(self.history.keys())=}"
-            return msg
-
-        if axs is None:
-            if with_lr:
-                fig, axs = plt.subplots(2, 1)
-            else:
-                fig, axs = plt.subplots(1, 1)
+        assert isinstance(axs, ndarray), f"{type(axs)=}"
+        assert (axs_shape := axs.shape) == (ideal_shape := (n_necessary_axes,)), f"{ideal_shape=} {axs_shape=}"
 
         if with_lr:
-            try:
-                ax_loss: Axes = axs[0]
-                ax_lr: Axes = axs[1]
-                self.ax_lr_ = ax_lr
-
-            except TypeError as ex:
-                if "'AxesSubplot' object is not subscriptable" not in ex.args[0]:
-                    raise ex
-
-                logger.error(f"Trying to plot a {this_class_name} with {with_lr=} with a single ax.")
-                raise ValueError(f"The argument `axs` should be a 1d-array of axes.")
+            axs_metrics: List[Axes] = axs[:-1].tolist()
+            ax_lr: Axes = axs[-1]
+            self.ax_lr_ = ax_lr
         else:
-            assert isinstance(axs, Axes)
-            ax_loss = axs
+            axs_metrics: List[Axes] = axs.tolist()
 
         # i don't know why this is done, I just copied
         self.axs_ = axs
-        self.fig_ = ax_loss.figure
-        self.ax_loss_ = ax_loss
+        self.fig_ = axs_metrics.figure
+        self.axs_metrics_ = axs_metrics
 
-        try:
-            epoch = self.history["epoch"]
+        x_axis = self.x_axis_
 
-        except KeyError as ex:
+        for metric_name, ax in zip(metrics, axs_metrics):
+            logger.debug(f"{this_func_name} plotting {metric_name}")
 
-            if ex.args[0] != "epoch":
+            try:
+                metric = self.history[metric_name]
+                metric_kwargs = {
+                    **dict(label="train"),
+                    **(metric_kwargs or dict())
+                }
+                # noinspection PyArgumentList
+                self.plots_[metric_name] = ax.plot(x_axis, metric, **metric_kwargs)
+
+            except KeyError as ex:
+                if ex.args[0] == metric_name:
+                    logger.error(f"{self._missing_signal_error_msg(metric_name, True)}")
                 raise ex
 
-            n_epochs = len(self.history["loss"])
-            logger.warning(
-                f"{_missing_signal_error_msg('epoch', True)}\n"
-                f"Using a default sequence (0, 1, ..., {n_epochs - 1=})"
+            val_metric_name = "val_" + metric_name
+            try:
+                val_metric = self.history[val_metric_name]
+                val_metric_kwargs = {
+                    **dict(label="val"),
+                    **(val_metric_kwargs or dict())
+                }
+                # noinspection PyArgumentList
+                self.plots_[val_metric_name] = ax.plot(x_axis, val_metric, **val_metric_kwargs)
+
+            except KeyError as ex:
+                if ex.args[0] != val_metric_name:
+                    raise ex
+                logger.warning(f"{self._missing_signal_error_msg(val_metric_name, False)}")
+
+            ax.set_title(
+                f"{metric_name} history "
+                f"{f'({self.loss_name})' if metric_name == 'loss' and self.loss_name is not None else ''}"
             )
-            epoch = np.arange(0, n_epochs)
+            ax.set_ylabel(self.loss_name if metric_name == 'loss' and self.loss_name is not None else metric_name)
+            ax.set_xlabel(self.x_axis_mode.name)
 
-        assert len(epoch) > 1, "You don't have enough epochs to plot. Go to the gym and call me later."
-
-        try:
-            loss = self.history["loss"]
-
-            line_loss_kwargs = dict(label="train")
-            # noinspection PyArgumentList
-            line_loss_kwargs.update(**(loss_kwargs or dict()))
-            self.plots_["loss"] = ax_loss.plot(epoch, loss, **line_loss_kwargs)
-
-        except KeyError as ex:
-            if ex.args[0] == "loss":
-                logger.error(f"{_missing_signal_error_msg('loss', True)}")
-            raise ex
+            # losses tend to go down, so this should be a good position
+            # notice that using default loc=None is slower
+            ax.legend(loc="upper right")
 
         try:
-            val_loss = self.history["val_loss"]
-
-            line_val_loss_kwargs = dict(label="val")
-            # noinspection PyArgumentList
-            line_val_loss_kwargs.update(**(val_loss_kwargs or dict()))
-            self.plots_["val_loss"] = ax_loss.plot(epoch, val_loss, **line_val_loss_kwargs)
-
-        except KeyError as ex:
-            if ex.args[0] != "val_loss":
-                raise ex
-            logger.warning(f"{_missing_signal_error_msg('val_loss', True)}")
-
-        ax_loss.set_title(f"Loss history {f'({self.loss_name})' or ''}")
-        ax_loss.set_ylabel(f"{self.loss_name or 'loss'}")
-        ax_loss.set_xlabel("epoch")
-
-        # losses tend to go down, so this should be a good position
-        # notice that using default loc=None is slower
-        ax_loss.legend(loc="upper right")
-
-        try:
-            self.plots_["lr"] = ax_lr.plot(epoch, self.history["lr"], label="lr")
+            self.plots_["lr"] = ax_lr.plot(x_axis, self.history["lr"], label="lr")
             ax_lr.set_title("Learning rate history")
             ax_lr.set_ylabel(f"learning rate (lr)")
             ax_lr.set_xlabel("epoch")
@@ -269,7 +337,7 @@ class TrainingHistoryDisplay(Display):
 
         except KeyError as ex:
             if ex.args[0] == "lr":
-                logger.error(f"{_missing_signal_error_msg('lr', True)}")
+                logger.error(self._missing_signal_error_msg('lr', True))
             raise ex
 
         if self.model_name is not None:
@@ -687,3 +755,72 @@ class VoxelValueHistogramPerClassDisplay(Display):
         fig.suptitle(f"Volume data histogram per class\nvolume={self.volume_name}")
 
         return self
+
+
+@dataclass
+class ClassProbabilityHistogramDisplay(Display):
+
+    bins: list
+    values_per_class: List[list]
+    labels_idx: List[int]
+    labels_names: List[str]
+
+    def __post_init__(self):
+        assert len(self.bins) == 101, f"{len(self.bins)=}"  # the bins borders/limits
+        assert min(self.bins) == 0, f"{min(self.bins)=}"
+        assert max(self.bins) == 1, f"{max(self.bins)}"
+
+        for idx in self.labels_idx:
+            assert (values_len := len(self.values_per_class[idx])) == 100, f"{values_len=} {idx=}"
+            assert np.isclose((sum_values := np.sum(self.values_per_class[idx])), 1, atol=.001), f"{sum_values=} {idx=}"
+
+        # i want to get the vertical borders to show up
+        self.bins = copy.copy(self.bins) + [1.001]
+        self.values_per_class = [
+            [0] + copy.copy(values_list) + [0]
+            for values_list in self.values_per_class
+        ]
+
+    @property
+    def title(self):
+        return f"probabilities-histogram"
+
+    def plot(self, ax: Axes) -> "ClassProbabilityHistogramDisplay":
+
+        self.axs_ = ax
+        self.fig_ = ax.figure
+
+        for idx, name, values in zip(self.labels_idx, self.labels_names, self.values_per_class):
+            self.plots_[f"proba_hist_{idx}"] = ax.step(
+                self.bins,
+                values,
+                label=f"probability('{name}' (idx={idx}))",
+                linewidth=1.5
+            )
+
+        xlims = (-.025, 1.025)
+        ylims_10pow = (-5, 0)
+        ylims = tuple(10 ** p for p in ylims_10pow)
+
+        ax.set_yscale('log')
+        ax.set_ylim(ylims[0], 1.5 * ylims[1])
+        ax.set_yticks(np.logspace(ylims_10pow[0], ylims_10pow[1], ylims_10pow[1] - ylims_10pow[0] + 1))
+        ax.set_ylabel(
+            f"Proportion of pixels in *log scale* \n"
+            f"log10(#voxels in bin / #voxels)"
+        )
+        ax.set_xlim(*xlims)
+        ax.set_xticks(np.linspace(0, 1, 11))
+        ax.set_xlabel("Probability\nbins of 0.01 = 1% width")
+
+        ax.tick_params(axis='y', left=True, right=True, labelleft=True, labelright=True, which="both")
+        ax.grid(True, axis='y', which='major', ls='--')
+
+        ax.set_title("Voxel probability histograms")
+        ax.legend(loc="upper center", fontsize="x-small", framealpha=1)
+
+        return self
+
+
+# @dataclass
+# class
