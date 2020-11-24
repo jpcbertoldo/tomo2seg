@@ -113,7 +113,7 @@ class GridPositionGenerator(ABC):
 
     def __post_init__(self):
         assert all(range_[0] <= range_[1] for range_ in self.axes_ranges)
-    
+
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
         return self.x_range, self.y_range, self.z_range
@@ -193,13 +193,17 @@ class SequentialGridPosition(GridPositionGenerator):
         return positions
 
     @classmethod
-    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]):
+    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int], **n_steps_kwargs):
         n_steps = dict(
             n_steps_x=int(np.ceil(volume_shape[0] / crop_shape[0])),
             n_steps_y=int(np.ceil(volume_shape[1] / crop_shape[1])),
             n_steps_z=int(np.ceil(volume_shape[2] / crop_shape[2])),
         )
         logger.info(f"Building {cls.__name__} with minimal overlap (smallest n_steps in each directions) {n_steps=}.")
+        if len(n_steps_kwargs) > 0:
+            n_steps = {**n_steps, **n_steps_kwargs}
+            logger.warning(f"{n_steps_kwargs=} was given --> effective {n_steps=}")
+
         # noinspection PyArgumentList
         return cls.build_from_volume_crop_shapes(
             volume_shape=volume_shape,
@@ -526,7 +530,7 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
 
 @dataclass
 class MetaCrop3D:
-    csv_header: ClassVar[str] = "x,y,z,elastic_transformation,geometric_transformation,value_shift"
+    csv_header: ClassVar[str] = "x,y,z,et,gt_type,gt,vs"
 
     x: slice
     y: slice
@@ -541,6 +545,7 @@ class MetaCrop3D:
 
     @property
     def shape(self) -> Tuple[int, int, int]:
+        # noinspection PyTypeChecker
         return tuple(
             axis.stop - axis.start
             for axis in self.slice
@@ -557,9 +562,10 @@ class MetaCrop3D:
         )
 
     def get_et_corner_coords(self,  x_: int, y_: int, z_: int) -> Tuple[float, float, float]:
-        assert x_ in (0, 1)
-        assert y_ in (0, 1)
-        assert z_ in (0, 1)
+        assert x_ in (0, 1), f"{x_=}"
+        assert y_ in (0, 1), f"{y_=}"
+        assert z_ in (0, 1), f"{z_=}"
+        # noinspection PyTypeChecker
         return tuple(
             coord + displacement
             for coord, displacement in zip(
@@ -577,11 +583,16 @@ class MetaCrop3D:
         )
 
     @property
+    def flat_axis(self) -> int:
+        assert self.is2d, f"{self.is2d=} {self.shape=}"
+        return [idx for idx in range(3) if self.is2d_on(idx)][0]
+
+    @property
     def is2d(self):
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
-        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.value},{self.vs}"
+        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs}"
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -619,18 +630,19 @@ def meta2crop(
     if meta_crop.et is None:
         crop = volume[meta_crop.slice].copy()
     else:
-        corners_binaries = list(product((0, 1), (0, 1), (0, 1)))
+        xbin = (0,) if meta_crop.is2d_on(0) else (0, 1)
+        ybin = (0,) if meta_crop.is2d_on(1) else (0, 1)
+        zbin = (0,) if meta_crop.is2d_on(2) else (0, 1)
+        corners_binaries = list(product(xbin, ybin, zbin))
 
         ijk_grid_corners = np.array([
             [
-                0 if ci_ == 0 else meta_crop.shape[0] - 1,
-                0 if cj_ == 0 else meta_crop.shape[1] - 1,
-                0 if ck_ == 0 else meta_crop.shape[2] - 1,
+                0 if c == 0 else s - 1
+                for c, s in zip(corner, meta_crop.shape)
             ]
-            for ci_, cj_, ck_ in corners_binaries
-        ])  # 8 x 3
+            for corner in corners_binaries
+        ])  # 4x3 or 8x3
 
-        # n_grid_points = (meta_crop.shape[0] * meta_crop.shape[1] * meta_crop.shape[2])
         ijk_grid_points = np.array(list(product(
             np.arange(meta_crop.shape[0]),
             np.arange(meta_crop.shape[1]),
@@ -640,7 +652,15 @@ def meta2crop(
         et_grid_corner_coords = np.array([
             meta_crop.get_et_corner_coords(ci_, cj_, ck_)
             for ci_, cj_, ck_ in corners_binaries
-        ])  # 8 x 3
+        ])  # 4x3 or 8x3
+
+        if meta_crop.is2d:
+            axes = [0, 1, 2]
+            axes.pop(meta_crop.flat_axis)
+            ijk_grid_corners = ijk_grid_corners[:, axes]
+            ijk_grid_points = ijk_grid_points[:, axes]
+            et_grid_corner_coords = et_grid_corner_coords[:, axes]
+            # et_grid_corner_coords[:, meta_crop.flat_axis] = meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis]
 
         def get_et_grid_coords(axis):
             return sp.interpolate.griddata(
@@ -651,14 +671,19 @@ def meta2crop(
             )  # n_grid_points x 1
 
         et_grid_coords = np.stack(
-            [get_et_grid_coords(dim) for dim in range(3)], axis=-1
+            [
+                meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis] * np.ones(ijk_grid_points.shape[0])
+                if meta_crop.is2d_on(dim) else
+                get_et_grid_coords(dim)
+                for dim in range(3)
+            ], axis=-1
         )  # n_grid_points x 3
 
         if interpolation == "spline":
             # todo test if t will be too slow cuz it might do a spline for the entire volume (?)
             crop = map_coordinates(
                 input=volume,
-                coordinates=et_grid_coords,
+                coordinates=et_grid_coords.T,
                 # todo check how this works, can it break it order=3 and the crop is in the corner?
                 # todo visualize the effect with crops at the borders because this will search for 3rd order derivatives
                 order=spline_order,
@@ -667,7 +692,7 @@ def meta2crop(
         elif interpolation == "nearest":
             # todo keep this somewhere to avoid generating?
             crop = sp.interpolate.interpn(
-                points=(
+                points=list(
                     np.arange(volume.shape[dim])
                     for dim in range(3)
                 ),
@@ -683,21 +708,23 @@ def meta2crop(
     # geometric_transformation
     if meta_crop.is2d:
         func = _GT2D_VAL2FUNC[meta_crop.gt.value]
-
-        if meta_crop.is2d_on(0):
-            sx = crop.shape[1]
-            sy = crop.shape[2]
-            crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
-        elif meta_crop.is2d_on(1):
-            sx = crop.shape[0]
-            sy = crop.shape[2]
-            crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
-        else:
-            sx = crop.shape[0]
-            sy = crop.shape[1]
-            crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
     else:
-        pass
+        raise NotImplementedError(f"Please implement {GT3D.__name__} transformations.")
+
+    if meta_crop.is2d_on(0):
+        sx = crop.shape[1]
+        sy = crop.shape[2]
+        crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
+    elif meta_crop.is2d_on(1):
+        sx = crop.shape[0]
+        sy = crop.shape[2]
+        crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
+    elif meta_crop.is2d_on(2):
+        sx = crop.shape[0]
+        sy = crop.shape[1]
+        crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
+    else:
+        crop = func(crop)
 
     if is_label:
         return crop.astype(int)
@@ -778,6 +805,7 @@ class VolumeCropSequence(Sequence):
     meta_crops_hist_buffer: List[List[MetaCrop3D]] = field(init=False)
     meta_crops_hist_path: Optional[Path] = None
 
+    output_as_2d: bool = False
     use_labels_ohe: bool = False
     debug__no_data_check: InitVar[bool] = False
 
@@ -861,33 +889,63 @@ class VolumeCropSequence(Sequence):
         self.meta_crops_hist_buffer.append(batch_meta_crops)
 
         # Initialization
-        X = np.empty(
-            (
+
+        n_classes = len(self.labels)
+
+        if self.output_as_2d:
+            target_x_shape = (
+                self.batch_size,
+                self.crop_shape[0],
+                self.crop_shape[1],
+                1  # mono-channel for now todo make it multichannel
+            )
+            target_y_shape = tuple(
+                [
+                    self.batch_size,
+                    self.crop_shape[0],
+                    self.crop_shape[1],
+                ] + self.use_labels_ohe * [n_classes]
+            )
+
+        else:  # 3d might it be (:
+            target_x_shape = (
                 self.batch_size,
                 self.crop_shape[0],
                 self.crop_shape[1],
                 self.crop_shape[2],
-                # mono-channel for now todo make it multichannel
-            ),
-            dtype=np.float
-        )
-        y = np.empty(
-            (
-                self.batch_size,
-                self.crop_shape[0],
-                self.crop_shape[1],
-                self.crop_shape[2],
-                len(self.labels) if self.use_labels_ohe else 1,
-            ),
-            dtype=np.uint8
-        )
+                1  # mono-channel for now todo make it multichannel
+            )
+            target_y_shape = tuple(
+                [
+                    self.batch_size,
+                    self.crop_shape[0],
+                    self.crop_shape[1],
+                    self.crop_shape[2],
+                ] + self.use_labels_ohe * [n_classes]
+            )
+
+        X = np.empty(target_x_shape, dtype=np.float)
+        y = np.empty(target_y_shape, dtype=np.uint8)
 
         for idx, meta_crop in enumerate(batch_meta_crops):
+
             data_crop = self.meta2data(meta_crop)
             labels_crop = self.meta2labels(meta_crop)
+
+            # make it 2d if that's the case
+            if self.output_as_2d:
+                data_crop, labels_crop = (
+                    (data_crop[:, :, 0], labels_crop[:, :, 0]) if meta_crop.is2d_on(2) else
+                    (data_crop[:, 0, :], labels_crop[:, 0, :]) if meta_crop.is2d_on(1) else
+                    (data_crop[0, :, :], labels_crop[0, :, :]) if meta_crop.is2d_on(0) else
+                    (data_crop, labels_crop)
+                )
+
             if self.use_labels_ohe:
-                labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
-            else:
-                labels_crop = labels_crop.reshape(*labels_crop.shape, 1)
-            X[idx], y[idx] = data_crop, labels_crop
+                raise NotImplementedError()  # the function here below needs to be revised
+                # labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
+
+            X[idx] = data_crop.reshape(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
+            y[idx] = labels_crop
+
         return X, y
