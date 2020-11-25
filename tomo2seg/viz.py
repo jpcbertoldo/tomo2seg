@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from string import Template
-from typing import List, Optional, Union, Dict, Tuple
+from typing import List, Optional, Union, Dict, Tuple, Iterable
 
 import humanize
 from matplotlib import pyplot as plt
@@ -155,11 +155,11 @@ class TrainingHistoryDisplay(Display):
         time = 4
 
     history: Dict[str, List]
-    x_axis_mode: Union[XAxisMode, str] = XAxisMode.epoch
+    x_axis_mode: Union[Union[XAxisMode, str], Tuple[Union[XAxisMode, str]]] = XAxisMode.epoch
     model_name: Optional[str] = None
     loss_name: Optional[str] = None
 
-    x_axis_: ndarray = field(init=False)
+    x_axes_: ndarray = field(init=False)
 
     # not arguments
     axs_metrics_: List[Axes] = field(init=False)
@@ -173,82 +173,93 @@ class TrainingHistoryDisplay(Display):
 
     def __post_init__(self):
         mode = self.x_axis_mode
-        self.x_axis_mode = self.XAxisMode[mode] if isinstance(mode, str) else mode
 
-        if self.x_axis_mode == self.XAxisMode.epoch:
-            try:
-                x_axis = self.history["epoch"]
+        mode = (mode,) if not isinstance(mode, tuple) else mode
+        # noinspection PyTypeChecker
+        self.x_axis_mode = tuple(
+            self.XAxisMode[mod] if isinstance(mod, str) else mod
+            for mod in mode
+        )
 
-            except KeyError as ex:
+        x_axes = []
 
-                if ex.args[0] != "epoch":
+        for mod in self.x_axis_mode:
+            if mod == self.XAxisMode.epoch:
+                try:
+                    x_axis = self.history["epoch"]
+
+                except KeyError as ex:
+
+                    if ex.args[0] != "epoch":
+                        raise ex
+
+                    n_epochs = len(self.history["loss"])
+
+                    logger.warning(
+                        f"{self._missing_signal_error_msg(ex.args[0], False)}\n"
+                        f"Using a default sequence (0, 1, ..., {n_epochs - 1=})"
+                    )
+                    x_axis = np.arange(0, n_epochs)
+
+            elif mod == self.XAxisMode.batch:
+                try:
+                    epoch_size = self.history["train.epoch_size"]
+                    x_axis = np.cumsum(epoch_size)
+
+                except KeyError as ex:
+                    if ex.args[0] == "train.epoch_size":
+                        # todo replace by logger.exception
+                        logger.error(self._missing_signal_error_msg(ex.args[0], True))
                     raise ex
 
-                n_epochs = len(self.history["loss"])
+            elif mod == self.XAxisMode.crop:
+                try:
+                    epoch_size = np.array(self.history["train.epoch_size"])
+                    batch_size = np.array(self.history["train.batch_size"])
+                    x_axis = np.cumsum(epoch_size * batch_size)
 
-                logger.warning(
-                    f"{self._missing_signal_error_msg(ex.args[0], False)}\n"
-                    f"Using a default sequence (0, 1, ..., {n_epochs - 1=})"
-                )
-                x_axis = np.arange(0, n_epochs)
+                except KeyError as ex:
+                    if ex.args[0] in ("train.epoch_size", "train.batch_size"):
+                        logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                    raise ex
 
-        elif self.x_axis_mode == self.XAxisMode.batch:
-            try:
-                epoch_size = self.history["train.epoch_size"]
-                x_axis = np.cumsum(epoch_size)
+            elif mod == self.XAxisMode.voxel:
+                try:
+                    epoch_size = np.array(self.history["train.epoch_size"])
+                    batch_size = np.array(self.history["train.batch_size"])
+                    n_voxels = np.array([
+                        shape[0] * shape[1] * shape[2]
+                        for shape in self.history["train.crop_shape"]
+                    ])
+                    x_axis = np.cumsum(epoch_size * batch_size * n_voxels)
 
-            except KeyError as ex:
-                if ex.args[0] == "train.epoch_size":
-                    # todo replace by logger.exception
-                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
-                raise ex
+                except KeyError as ex:
+                    if ex.args[0] in ("train.epoch_size", "train.batch_size", "train.crop_shape"):
+                        logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                    raise ex
 
-        elif self.x_axis_mode == self.XAxisMode.crop:
-            try:
-                epoch_size = np.array(self.history["train.epoch_size"])
-                batch_size = np.array(self.history["train.batch_size"])
-                x_axis = np.cumsum(epoch_size * batch_size)
+            elif mod == self.XAxisMode.time:
+                try:
+                    seconds = self.history["seconds"]
+                    x_axis = np.cumsum(seconds)
 
-            except KeyError as ex:
-                if ex.args[0] in ("train.epoch_size", "train.batch_size"):
-                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
-                raise ex
+                except KeyError as ex:
+                    if ex.args[0] == "seconds":
+                        logger.error(self._missing_signal_error_msg(ex.args[0], True))
+                    raise ex
 
-        elif self.x_axis_mode == self.XAxisMode.voxel:
-            try:
-                epoch_size = np.array(self.history["train.epoch_size"])
-                batch_size = np.array(self.history["train.batch_size"])
-                n_voxels = np.array([
-                    shape[0] * shape[1] * shape[2]
-                    for shape in self.history["train.crop_shape"]
-                ])
-                x_axis = np.cumsum(epoch_size * batch_size * n_voxels)
+            else:
+                raise NotImplementedError(f"{self.x_axis_mode=}")
 
-            except KeyError as ex:
-                if ex.args[0] in ("train.epoch_size", "train.batch_size", "train.crop_shape"):
-                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
-                raise ex
+            assert len(x_axis) > 1, "You don't have enough epochs to plot. Go to the gym and call me later."
 
-        elif self.x_axis_mode == self.XAxisMode.time:
-            try:
-                seconds = self.history["seconds"]
-                x_axis = np.cumsum(seconds)
+            x_axes.append(x_axis)
 
-            except KeyError as ex:
-                if ex.args[0] == "seconds":
-                    logger.error(self._missing_signal_error_msg(ex.args[0], True))
-                raise ex
-
-        else:
-            raise NotImplementedError(f"{self.x_axis_mode=}")
-
-        assert len(x_axis) > 1, "You don't have enough epochs to plot. Go to the gym and call me later."
-
-        self.x_axis_ = x_axis
+        self.x_axes_ = np.array(x_axes)
 
     @property
     def title(self) -> str:
-        x_axis = self.x_axis_mode.name
+        x_axis = "-".join([mod.name for mod in self.x_axis_mode])
         return (self.model_name or "unknown-model") + f".training-history-plot.{x_axis=}"
 
     def plot(
@@ -276,10 +287,8 @@ class TrainingHistoryDisplay(Display):
 
         # i don't know why this is done, I just copied
         self.axs_ = axs
-        self.fig_ = axs_metrics.figure
+        self.fig_ = axs_metrics[0].figure
         self.axs_metrics_ = axs_metrics
-
-        x_axis = self.x_axis_
 
         for metric_name, ax in zip(metrics, axs_metrics):
             logger.debug(f"{this_func_name} plotting {metric_name}")
@@ -290,8 +299,32 @@ class TrainingHistoryDisplay(Display):
                     **dict(label="train"),
                     **(metric_kwargs or dict())
                 }
+
                 # noinspection PyArgumentList
-                self.plots_[metric_name] = ax.plot(x_axis, metric, **metric_kwargs)
+                self.plots_[metric_name] = ax.plot(self.x_axes_[0], metric, **metric_kwargs)
+
+                x_tickss = []
+                for x_axis_ in self.x_axes_:
+                    tick_locator = plt.LinearLocator(numticks=11)
+                    x_tickss.append(tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_)))
+
+                ax.set_xticks(x_tickss[0])
+                x_tickss = [
+                    [
+                        str(int(val)) if mod == self.XAxisMode.epoch else
+                        str(int(val)) if mod == self.XAxisMode.batch else
+                        str(int(val / 1000)) + "k" if mod == self.XAxisMode.crop else
+                        humanize.intword(int(val)) if mod == self.XAxisMode.voxel else
+                        humanize.time.naturaldelta(val, minimum_unit="seconds") if mod == self.XAxisMode.time else
+                        "err"
+                        for val in ticks
+                    ]
+                    for ticks, mod in zip(x_tickss, self.x_axis_mode)
+                ]
+                # transpose
+                x_tickss = list(zip(*x_tickss))
+                x_ticks = ["\n".join(strs) for strs in x_tickss]
+                ax.set_xticklabels(x_ticks)
 
             except KeyError as ex:
                 if ex.args[0] == metric_name:
@@ -306,7 +339,7 @@ class TrainingHistoryDisplay(Display):
                     **(val_metric_kwargs or dict())
                 }
                 # noinspection PyArgumentList
-                self.plots_[val_metric_name] = ax.plot(x_axis, val_metric, **val_metric_kwargs)
+                self.plots_[val_metric_name] = ax.plot(self.x_axes_[0], val_metric, **val_metric_kwargs)
 
             except KeyError as ex:
                 if ex.args[0] != val_metric_name:
@@ -318,14 +351,14 @@ class TrainingHistoryDisplay(Display):
                 f"{f'({self.loss_name})' if metric_name == 'loss' and self.loss_name is not None else ''}"
             )
             ax.set_ylabel(self.loss_name if metric_name == 'loss' and self.loss_name is not None else metric_name)
-            ax.set_xlabel(self.x_axis_mode.name)
+            ax.set_xlabel("/".join([mod.name for mod in self.x_axis_mode]))
 
             # losses tend to go down, so this should be a good position
             # notice that using default loc=None is slower
             ax.legend(loc="upper right")
 
         try:
-            self.plots_["lr"] = ax_lr.plot(x_axis, self.history["lr"], label="lr")
+            self.plots_["lr"] = ax_lr.plot(self.x_axes_[0], self.history["lr"], label="lr")
             ax_lr.set_title("Learning rate history")
             ax_lr.set_ylabel(f"learning rate (lr)")
             ax_lr.set_xlabel("epoch")
