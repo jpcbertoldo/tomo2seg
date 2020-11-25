@@ -75,3 +75,7 @@ class Model:
     @property
     def train_metacrop_history_path(self) -> Path:
         return self.model_path / "metacrop-history.csv"
+
+    @property
+    def train_history_plot_wip_path(self) -> Path:
+        return self.model_path / "train-hist-plot-wip.png"
