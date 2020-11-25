@@ -314,7 +314,7 @@ class TrainingHistoryDisplay(Display):
                         str(int(val)) if mod == self.XAxisMode.epoch else
                         str(int(val)) if mod == self.XAxisMode.batch else
                         str(int(val / 1000)) + "k" if mod == self.XAxisMode.crop else
-                        humanize.intword(int(val)) if mod == self.XAxisMode.voxel else
+                        humanize.intword(int(float(f"{val:.2g}"))) if mod == self.XAxisMode.voxel else
                         humanize.time.naturaldelta(val, minimum_unit="seconds") if mod == self.XAxisMode.time else
                         "err"
                         for val in ticks

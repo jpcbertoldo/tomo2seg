@@ -34,7 +34,7 @@ class Model:
     @property
     def name(self) -> str:
         s = str(self.runid)
-        return f"{self.master_name}.{self.version}.{self.fold:03d}.{f'{s[:4]}-{s[4:7]}-{s[7:]}'}"
+        return f"{self.master_name}.{self.version}.fold{self.fold:03d}.{f'{s[:4]}-{s[4:7]}-{s[7:]}'}"
 
     @property
     def model_path(self) -> Path:

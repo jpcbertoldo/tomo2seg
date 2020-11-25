@@ -1,0 +1,2 @@
+epoch,loss,val_loss,lr,train.batch_size,train.epoch_size,train.crop_shape,val.batch_size,val.epoch_size,val.crop_shape,seconds
+0,0.6654891967773438,0.6637067794799805,9.999999747378752e-06,16,10,"(320, 320, 1)",16,1200,"(320, 320, 1)",304.37671971321106
