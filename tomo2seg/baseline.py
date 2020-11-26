@@ -215,6 +215,21 @@ logger.info(f"{losses=}")
 # ======================================================= table ========================================================
 
 
+def get_loss(model: TheoreticalModel, attr: str, is_classwise: bool) -> str:
+
+    try:
+        loss = getattr(model, attr)
+
+    except AttributeError:
+        return "not def"
+
+    if not is_classwise:
+        return f"{loss :.3g}"
+
+    else:
+        return ", ".join(f'{float(f"{val:.2g}"):.2f}' for val in loss)
+
+
 table = pd.DataFrame(
     data={
         **{
@@ -222,11 +237,11 @@ table = pd.DataFrame(
             for attr in ["fullname"]
         },
         **{
-            attr: [f"{getattr(model, attr):.3g}" for model in models]
+            attr.split("_loss")[0]: [get_loss(model, attr, False) for model in models]
             for attr in global_losses
         },
         **{
-            attr: [", ".join(f'{float(f"{val:.3g}"):.3f}' for val in getattr(model, attr)) for model in models]
+            attr.split("_losses")[0]: [get_loss(model, attr, True) for model in models]
             for attr in classwise_losses
         },
     }
