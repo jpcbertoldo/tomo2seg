@@ -34,7 +34,7 @@ class Model:
     @property
     def name(self) -> str:
         s = str(self.runid)
-        return f"{self.master_name}.{self.version}.{self.fold:03d}.{f'{s[:4]}-{s[4:7]}-{s[7:]}'}"
+        return f"{self.master_name}.{self.version}.fold{self.fold:03d}.{f'{s[:4]}-{s[4:7]}-{s[7:]}'}"
 
     @property
     def model_path(self) -> Path:
@@ -75,3 +75,7 @@ class Model:
     @property
     def train_metacrop_history_path(self) -> Path:
         return self.model_path / "metacrop-history.csv"
+
+    @property
+    def train_history_plot_wip_path(self) -> Path:
+        return self.model_path / "train-hist-plot-wip.png"

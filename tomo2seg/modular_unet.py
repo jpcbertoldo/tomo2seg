@@ -1,106 +1,169 @@
 """Modular U-Net"""
 
+import functools
+
 # Installed packages
+from enum import Enum
+
 import tensorflow
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (
-    Input,
-    concatenate,
-    Conv2D,
-    MaxPooling2D,
-    UpSampling2D,
-    GaussianNoise,
-    Dropout,
-    Conv2DTranspose,
-    SeparableConv2D,
-    Activation,
-    add,
-    BatchNormalization,
-)
+from tensorflow.keras import layers
+
+
+class ConvLayer(Enum):
+    conv2d = 0
+    conv2d_separable = 1
+    conv3d = 10
+    conv3d_separable = 11
 
 
 # todo use model class instead
-def generic_unet_block(name, nb_filters_1, nb_filters_2, kernel_size, res, batch_norm, dropout, separable_conv=True):
+def generic_unet_block(name, nb_filters_1, nb_filters_2, convlayer: ConvLayer, kernel_size, res, batch_norm, dropout):
+    if convlayer == ConvLayer.conv2d:
+        conv_layer = layers.Conv2D
 
-    conv_layer = SeparableConv2D if separable_conv else Conv2D
+    elif convlayer == ConvLayer.conv2d_separable:
+        conv_layer = layers.SeparableConv2D
+
+    elif convlayer == ConvLayer.conv3d:
+        conv_layer = layers.Conv3D
+
+    elif convlayer == ConvLayer.conv3d_separable:
+        raise NotImplementedError(f"{convlayer.name=}")
+
+    else:
+        raise ValueError(f"{convlayer=}")
 
     def fn(tensor):
 
         x = tensor
         skip = x
 
-        x = conv_layer(nb_filters_1, kernel_size, padding="same", name=f"{name}-conv1")(x)
+        x = conv_layer(nb_filters_1, activation="linear", kernel_size=kernel_size, padding="same",
+                       name=f"{name}-conv1")(x)
+
         if batch_norm:
-            x = BatchNormalization()(x)
-        x = Activation("relu")(x)
+            x = layers.BatchNormalization(name=f"{name}-conv1-bn")(x)
+
+        x = layers.Activation("relu", name=f"{name}-conv1-relu")(x)
 
         if dropout > 0:
-            x = Dropout(dropout)(x)
+            x = layers.Dropout(dropout, name=f"{name}-conv1-dropout")(x)
 
-        x = conv_layer(nb_filters_2, kernel_size, padding="same", name=f"{name}-conv2")(x)
+        x = conv_layer(nb_filters_2, activation="linear", kernel_size=kernel_size, padding="same",
+                       name=f"{name}-conv2")(x)
+
         if batch_norm:
-            x = BatchNormalization()(x)
+            x = layers.BatchNormalization(name=f"{name}-conv2-bn")(x)
 
         if res:
             # todo check if this layer should have a batchnorm
-            skip = conv_layer(nb_filters_2, kernel_size, padding="same", name=f"{name}-conv-skip")(skip)
-            # add batchnorm
-            x = add([x, skip])
+            skip = conv_layer(nb_filters_2, activation="linear", kernel_size=kernel_size, padding="same",
+                              name=f"{name}-conv-skip")(skip)
 
-        x = Activation("relu")(x)
+            if batch_norm:
+                skip = layers.BatchNormalization(name=f"{name}-conv-skip-bn")(skip)
+
+            x = layers.add([x, skip], name=f"{name}-residual")
+
+        x = layers.Activation("relu", name=f"{name}-conv2-relu")(x)
 
         if dropout > 0:
-            x = Dropout(dropout)(x)
-            
+            x = layers.Dropout(dropout, name=f"{name}-conv2-dropout")(x)
+
         return x
 
     return fn
 
 
-def generic_unet_down(conv_sampling, nb_filters=None, name=None):
+def generic_unet_down(conv_sampling, convlayer, nb_filters, name):
     if conv_sampling:
+
+        if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
+            conv_layer = layers.Conv2D
+
+        elif convlayer in (ConvLayer.conv3d, ConvLayer.conv3d_separable):
+            conv_layer = layers.Conv3D
+
+        else:
+            raise ValueError(f"{convlayer=}")
 
         if nb_filters is None:
             raise ValueError("When conv_sampling is True, nb_filters should be given")
 
         def fn(tensor):
-            x = Conv2D(nb_filters, 3, padding="same", strides=(2, 2), name=f"{name}-DOWN")(tensor)
+            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-DOWN")(tensor)
             return x
 
     else:
 
+        if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
+            max_pooling = layers.MaxPooling2D
+            pool_size = (2, 2)
+
+        elif convlayer in (ConvLayer.conv3d, ConvLayer.conv3d_separable):
+            max_pooling = layers.MaxPooling3D
+            pool_size = (2, 2, 2)
+
+        else:
+            raise ValueError(f"{convlayer=}")
+
         def fn(tensor):
-            x = MaxPooling2D(pool_size=(2, 2))(tensor)
+            x = max_pooling(pool_size=pool_size, name=f"{name}-DOWN")(tensor)
             return x
 
     return fn
 
 
-def generic_unet_up(conv_sampling, nb_filters=None, name=None):
+def generic_unet_up(conv_sampling, convlayer, nb_filters, name):
     if conv_sampling:
+
+        if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
+            conv_layer = layers.Conv2DTranspose
+
+        elif convlayer in (ConvLayer.conv3d, ConvLayer.conv3d_separable):
+            conv_layer = layers.Conv3DTranspose
+
+        else:
+            raise ValueError(f"{convlayer=}")
 
         if nb_filters is None:
             raise ValueError("When conv_sampling is True, nb_filters should be given")
 
         def fn(tensor):
-            x = Conv2DTranspose(nb_filters, 3, padding="same", strides=(2, 2), name=f"{name}-UP")(tensor)
+            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-UP")(tensor)
             return x
 
     else:
 
+        if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
+            up_sampling = layers.UpSampling2D
+            pool_size = (2, 2)
+
+        elif convlayer in (ConvLayer.conv3d, ConvLayer.conv3d_separable):
+            up_sampling = layers.UpSampling3D
+            pool_size = (2, 2, 2)
+
         def fn(tensor):
-            x = UpSampling2D(size=(2, 2))(tensor)
+            x = up_sampling(size=pool_size, name=f"{name}-UP")(tensor)
             return x
 
     return fn
 
 
 def u_net(
-    input_shape,
-    nb_filters_0,
-    output_channels,
-    name=None,
+        input_shape,
+        nb_filters_0,
+        output_channels,
+        depth,
+        sigma_noise,
+        convlayer,
+        updown_conv_sampling,
+        unet_block_kwargs,
+        unet_down_kwargs,
+        unet_up_kwargs,
+        name=None,
 ):
     """Modular U-Net.
 
@@ -109,52 +172,93 @@ def u_net(
 
     todo make this multichannel enabled
 """
-    import functools
+    unet_block_kwargs = {
+        **unet_block_kwargs,
+        **dict(convlayer=convlayer)
+    }
+
     unet_block = functools.partial(
-        generic_unet_block,
-        kernel_size=3,
-        res=True,
-        batch_norm=True,
-        dropout=0.03,
-        separable_conv=True,   # todo start with false
+        generic_unet_block, **unet_block_kwargs
     )
+
+    unet_down_kwargs = {
+        **unet_down_kwargs,
+        **dict(
+            conv_sampling=updown_conv_sampling,
+            convlayer=convlayer,
+        )
+    }
+
     unet_down = functools.partial(
-        generic_unet_down,
-        conv_sampling=True,
+        generic_unet_down, **unet_down_kwargs
     )
+
+    unet_up_kwargs = {
+        **unet_up_kwargs,
+        **dict(
+            conv_sampling=updown_conv_sampling,
+            convlayer=convlayer,
+        )
+    }
 
     unet_up = functools.partial(
-        generic_unet_up,
-        conv_sampling=True,
+        generic_unet_up, **unet_up_kwargs
     )
 
-    depth = 4
-    # sigma_noise = 0.03
-
-    x = x0 = Input(input_shape)
+    x = x0 = layers.Input(input_shape, name="input")
 
     skips = {}
     for i in range(depth):
         nb_filters_begin = nb_filters_0 * 2 ** i
         nb_filters_end = nb_filters_0 * 2 ** (i + 1)
-        x = unet_block(f"encoder-block-{i}", nb_filters_begin, nb_filters_end)(x)
+        x = unet_block(f"enc-block-{i}", nb_filters_1=nb_filters_begin, nb_filters_2=nb_filters_end)(x)
         skips[i] = x
-        x = unet_down(nb_filters=nb_filters_end, name=f"encoder-block-{i}")(x)
+        x = unet_down(nb_filters=nb_filters_end, name=f"enc-block-{i}")(x)
 
     nb_filters_begin = nb_filters_0 * 2 ** depth
     nb_filters_end = nb_filters_0 * 2 ** (depth + 1)
-    x = unet_block(f"encoder-block-{depth}", nb_filters_begin, nb_filters_end)(x)
+    x = unet_block(f"enc-block-{depth}", nb_filters_1=nb_filters_begin, nb_filters_2=nb_filters_end)(x)
 
     for i in reversed(range(depth)):
         nb_filters_up = nb_filters_0 * 2 ** (i + 2)
         nb_filters_conv = nb_filters_0 * 2 ** (i + 1)
-        x = unet_up(nb_filters=nb_filters_up, name=f"decoder-block-{i}")(x)
+        x = unet_up(nb_filters=nb_filters_up, name=f"dec-block-{i}")(x)
         x_skip = skips[i]
-        x = concatenate([x_skip, x], axis=3)
-        x = unet_block(f"decoder-block-{i}", nb_filters_conv, nb_filters_conv)(x)
+        x = layers.concatenate([x_skip, x], axis=-1)
+        x = unet_block(f"dec-block-{i}", nb_filters_1=nb_filters_conv, nb_filters_2=nb_filters_conv)(x)
 
-    # x = GaussianNoise(sigma_noise)(x)
+    if sigma_noise > 0:
+        x = layers.GaussianNoise(sigma_noise, name="gaussian-noise")(x)
 
-    x = Conv2D(output_channels, 1, activation="softmax", name="out")(x)
+    x = layers.Conv2D(output_channels, 1, activation="softmax", name="out")(x)
 
     return Model(x0, x, name=name)
+
+
+kwargs_vanilla00 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=False,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=False,
+        batch_norm=False,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)
+
+kwargs_vanilla01 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=False,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
+        batch_norm=False,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)

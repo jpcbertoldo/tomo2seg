@@ -3,11 +3,14 @@ from pathlib import Path
 from typing import Optional
 
 import pandas
-from attr import dataclass
+from dataclasses import dataclass
 from tensorflow.keras.callbacks import History as KerasHistory
 from tensorflow.keras.optimizers import Optimizer
 from tensorflow.keras import backend as K
+from tensorflow.python.keras.callbacks import Callback
+from matplotlib import pyplot as plt
 
+from . import viz
 from .logger import logger
 from .volume_sequence import VolumeCropSequence
 
@@ -87,3 +90,56 @@ class History(KerasHistory):
         if len(self.history) == 0:
             return pandas.DataFrame()
         return pandas.DataFrame(self.history).set_index("epoch")
+
+
+@dataclass
+class HistoryPlot(Callback):
+
+    history_callback: History
+    save_path: Path
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch < 2:
+            logger.debug(f"{epoch=} is too early to plot something.")
+
+        try:
+
+            fig, axs = plt.subplots(
+                nrows := 2,
+                ncols := 1,
+                figsize=(2.5 * ncols * (sz := 5), nrows * sz),
+                dpi=100
+            )
+            fig.set_tight_layout(True)
+
+            hist_display = viz.TrainingHistoryDisplay(
+                self.history_callback.history,
+                x_axis_mode=(
+                    "epoch",
+                    "batch",
+                    "crop",
+                    "voxel",
+                    "time",
+                ),
+            ).plot(
+                axs,
+                with_lr=True,
+                metrics=("loss", ),
+            )
+
+            axs[0].set_yscale("log")
+            axs[-1].set_yscale("log")
+
+            viz.mark_min_values(hist_display.axs_metrics_[0], hist_display.plots_["loss"][0])
+            viz.mark_min_values(hist_display.axs_metrics_[0], hist_display.plots_["val_loss"][0],
+                                txt_kwargs=dict(rotation=0))
+
+            hist_display.fig_.savefig(
+                self.save_path,
+                format='png',
+            )
+            plt.close()
+
+        except Exception as ex:
+            logger.exception(f"{ex.__class__.__name__} occurred while trying to plot the history.")
+
