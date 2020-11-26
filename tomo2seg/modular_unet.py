@@ -65,7 +65,7 @@ def generic_unet_block(name, nb_filters_1, nb_filters_2, convlayer: ConvLayer, k
             if batch_norm:
                 skip = layers.BatchNormalization(name=f"{name}-conv-skip-bn")(skip)
 
-            x = layers.add([x, skip], name="residual")
+            x = layers.add([x, skip], name=f"{name}-residual")
 
         x = layers.Activation("relu", name=f"{name}-conv2-relu")(x)
 
@@ -242,6 +242,20 @@ kwargs_vanilla00 = dict(
     unet_block_kwargs=dict(
         kernel_size=3,
         res=False,
+        batch_norm=False,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)
+
+kwargs_vanilla01 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=False,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
         batch_norm=False,
         dropout=0,
     ),
