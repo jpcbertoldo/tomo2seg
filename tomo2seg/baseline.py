@@ -128,6 +128,8 @@ class ValueHistogramBased(TheoreticalModel):
     # decisions_map: ndarray = field(init=False)
 
     def __post_init__(self):
+        raise NotImplementedError("I have to finish implementing this model.")
+
         assert (shape_1 := self.value_histograms.shape[1]) == 256, f"{shape_1=}"
 
         class_proportions = self.value_histograms.sum(axis=1)
@@ -230,4 +232,6 @@ table = pd.DataFrame(
     }
 ).set_index("fullname")
 
-print(tabulate(table, headers="keys", tablefmt="psql"))
+
+if __name__ == "__main__":
+    print(tabulate(table, headers="keys", tablefmt="psql"))

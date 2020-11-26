@@ -3,11 +3,11 @@ from typing import Optional
 
 import requests
 
-from .logger import logger
+from tomo2seg.logger import logger
 
 
 # should contain the webhook_url
-SLACK_JSON = "/home/jcasagrande/projects/tomo2seg/data/slack.json"
+SLACK_JSON = "/home/users/jcasagrande/projects/tomo2seg/data/slack.json"
 
 
 class SlackJsonError(Exception):
@@ -67,3 +67,5 @@ def notify_error():
     notify("A problem occurred during the training.")
 
 
+if __name__ == "__main__":
+    notify("test message :*")

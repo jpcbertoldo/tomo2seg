@@ -269,7 +269,8 @@ class TrainingHistoryDisplay(Display):
         with_lr: bool = False,
         metric_kwargs: dict = None,
         val_metric_kwargs: dict = None,
-        lr_kwargs: dict = None
+        lr_kwargs: dict = None,
+        n_xticks: int = 11,
     ) -> "TrainingHistoryDisplay":
         check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
 
@@ -290,6 +291,8 @@ class TrainingHistoryDisplay(Display):
         self.fig_ = axs_metrics[0].figure
         self.axs_metrics_ = axs_metrics
 
+        tick_locator = plt.LinearLocator(numticks=n_xticks)
+
         for metric_name, ax in zip(metrics, axs_metrics):
             logger.debug(f"{this_func_name} plotting {metric_name}")
 
@@ -305,7 +308,6 @@ class TrainingHistoryDisplay(Display):
 
                 x_tickss = []
                 for x_axis_ in self.x_axes_:
-                    tick_locator = plt.LinearLocator(numticks=11)
                     x_tickss.append(tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_)))
 
                 ax.set_xticks(x_tickss[0])
@@ -359,6 +361,7 @@ class TrainingHistoryDisplay(Display):
 
         try:
             self.plots_["lr"] = ax_lr.plot(self.x_axes_[0], self.history["lr"], label="lr")
+            ax_lr.set_xticks(tick_locator.tick_values(vmin=min(self.x_axes_[0]), vmax=max(self.x_axes_[0])))
             ax_lr.set_title("Learning rate history")
             ax_lr.set_ylabel(f"learning rate (lr)")
             ax_lr.set_xlabel("epoch")
