@@ -20,9 +20,11 @@ from numpy.random import RandomState
 import scipy as sp
 from scipy.interpolate import RegularGridInterpolator, griddata
 from scipy.ndimage import map_coordinates
+import sklearn as skl
+import sklearn.preprocessing
 from tensorflow.keras.utils import Sequence
 
-from .logger import logger
+from tomo2seg.logger import logger
 
 
 class GT2D(Enum):
@@ -112,11 +114,16 @@ class GridPositionGenerator(ABC):
     z_range: Tuple[int, int]
 
     def __post_init__(self):
-        assert all(range_[0] <= range_[1] for range_ in self.axes_ranges)
+        for axis, axis_range in zip(range(3), self.axes_ranges):
+            assert axis_range[0] <= axis_range[1], f"{axis=} {axis_range=}"
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
         return self.x_range, self.y_range, self.z_range
+
+    @property
+    def axes_range_sizes(self) -> Tuple[int, int, int]:
+        return tuple(stop - start for start, stop in self.axes_ranges)
 
     def get(self, n: int) -> ndarray:  # (n, 3)
         assert n > 0
@@ -137,12 +144,17 @@ class GridPositionGenerator(ABC):
                 f"Trying to build {cls.__name__} from volume and crop shapes but range values were given in kwargs. "
                 f"Please remove them. {list(kwargs.keys())=}"
             )
+
+        for axis, volume_axis_size, crop_axis_size in zip(range(3), volume_shape, crop_shape):
+            assert 0 < crop_axis_size <= volume_axis_size, f"{axis=} {crop_axis_size=} {volume_axis_size=}"
+
         ranges = {
             "x_range": (0, volume_shape[0] - crop_shape[0] + 1),
             "y_range": (0, volume_shape[1] - crop_shape[1] + 1),
             "z_range": (0, volume_shape[2] - crop_shape[2] + 1),
         }
         logger.info(f"Built {cls.__name__} from {volume_shape=} and {crop_shape=} ==> {ranges}")
+
         # noinspection PyArgumentList
         return cls(
             *args,
@@ -152,6 +164,7 @@ class GridPositionGenerator(ABC):
 
 @dataclass
 class UniformGridPosition(GridPositionGenerator):
+
     random_state: RandomState
 
     def _concrete_getitem(self, n: int) -> ndarray:  # (n, 3)
@@ -172,7 +185,14 @@ class SequentialGridPosition(GridPositionGenerator):
     n_steps_y: int
     n_steps_z: int
 
+    @property
+    def axes_n_steps(self) -> Tuple[int, int, int]:
+        return self.n_steps_x, self.n_steps_y, self.n_steps_z
+
     def __post_init__(self):
+        for axis, axis_n_steps, axis_range_size in zip(range(3), self.axes_n_steps, self.axes_range_sizes):
+            assert 0 < axis_n_steps <= axis_range_size, f"{axis=} {axis_n_steps=} {axis_range_size=}"
+
         self.positions = np.array([
             [int(x), int(y), int(z)]
             for z, y, x in product(
@@ -211,6 +231,164 @@ class SequentialGridPosition(GridPositionGenerator):
             **n_steps,
         )
 
+    @classmethod
+    def build_all_positions(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]):
+        n_steps = dict(
+            n_steps_x=volume_shape[0] - crop_shape[0] + 1,
+            n_steps_y=volume_shape[1] - crop_shape[1] + 1,
+            n_steps_z=volume_shape[2] - crop_shape[2] + 1,
+        )
+        # noinspection PyArgumentList
+        return cls.build_from_volume_crop_shapes(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            **n_steps,
+        )
+
+
+@dataclass
+class VoxelwiseProbabilityGridPotion(GridPositionGenerator):
+    """
+    Each position in the grid has its own probability.
+    Get a tuple (i, j) randomly with the marginal probability on axis (0, 1),
+    then use the conditional probability P[k|i,j] to pick the k value.
+    Picking (i, j, k) at once is too slow.
+
+    Attention: the arg `probabilities_volume` might be modified, so only pass copies!
+    """
+
+    probabilities_volume: ndarray
+    random_state: RandomState
+
+    def __post_init__(self):
+        self.vol_shape = vol_shape = self.probabilities_volume.shape
+        for axis, (start, stop), vol_axis_size in zip(range(3), self.axes_ranges, vol_shape):
+            assert (range_size := stop - start) == vol_axis_size, f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+
+        # marginal probabilities of (i, j)
+        self.ij_probas = self.probabilities_volume.sum(axis=2, keepdims=True)
+        # doing it twice makes it more stable
+        self.ij_probas /= self.ij_probas.sum()
+
+        # probabilities P[i,j,k] become P[k|i,j]
+        self.probabilities_volume /= self.ij_probas
+        # doing it twice makes it more stable
+        self.probabilities_volume /= self.probabilities_volume.sum(axis=2, keepdims=True)
+
+        # get rid of unnecessary dimensions
+        self.ij_probas = self.ij_probas[:, :, 0]
+
+        # this is the tolerance of the function choice
+        # https://github.com/numpy/numpy/blob/c2b6ab9924271b96d3c783f7818723a1bb8f511a/numpy/random/mtrand/mtrand.pyx#L1093
+        assert np.isclose((ij_probas_sum := self.ij_probas.sum()), 1., atol=1e-8), f"{ij_probas_sum=}"
+        assert np.all(np.isclose(self.probabilities_volume.sum(axis=2), 1., atol=1e-8)), "oops"
+
+        self.ij_probas = self.ij_probas.ravel()
+        self.ij_sequentials = np.arange(vol_shape[0] * vol_shape[1])
+        self.k_sequentials = np.arange(vol_shape[2])
+
+    def _concrete_getitem(self, n_positions: int) -> ndarray:
+        ns = self.random_state.choice(
+            self.ij_sequentials,
+            p=self.ij_probas,
+            replace=True,
+            size=n_positions
+        )
+        ijs = np.c_[ns // self.vol_shape[1], ns % self.vol_shape[1]]
+        return np.c_[ijs[:, 0], ijs[:, 1], [
+            self.random_state.choice(
+                self.k_sequentials,
+                p=self.probabilities_volume[i, j, :],
+                replace=True,
+                size=1
+            )
+            for i, j in ijs
+        ]]
+
+
+@dataclass
+class VoxelwiseProbabilityGridPotion2(GridPositionGenerator):
+    """
+    Each position in the grid has its own probability.
+    Get a position `i` randomly with the marginal probability on axis (0,),
+    then use the conditional probability P[j|i] to pick the `j` value,
+    then P[k|i,j] to pick `k`.
+    Picking (i, j, k) at once is too slow.
+
+    Attention: the arg `probabilities_volume` might be modified, so only pass copies!
+    """
+
+    probabilities_volume: ndarray
+    random_state: RandomState
+
+    def __post_init__(self):
+        self.vol_shape = vol_shape = self.probabilities_volume.shape
+        for axis, (start, stop), vol_axis_size in zip(range(3), self.axes_ranges, vol_shape):
+            assert (range_size := stop - start) == vol_axis_size, f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+
+        # marginal probabilities of (i, j)
+        self.ij_probas = self.probabilities_volume.sum(axis=2, keepdims=True)
+        # doing it twice makes it more stable
+        self.ij_probas /= self.ij_probas.sum()
+
+        # probabilities P[i,j,k] become P[k|i,j]
+        self.probabilities_volume /= self.ij_probas
+        # doing it twice makes it more stable
+        self.probabilities_volume /= self.probabilities_volume.sum(axis=2, keepdims=True)
+
+        # get rid of unnecessary dimensions
+        self.ij_probas = self.ij_probas[:, :, 0]
+
+        # marginal probabilities of `i`
+        self.i_probas = self.ij_probas.sum(axis=1, keepdims=True)
+        # doing it twice makes it more stable
+        self.i_probas /= self.i_probas.sum()
+
+        # the marginal probabilities P[i, j] become P[j|i]
+        self.ij_probas /= self.i_probas
+        # doing it twice makes it more stable
+        self.ij_probas /= self.ij_probas.sum(axis=1, keepdims=True)
+
+        # get rid of unnecessary dimensions
+        self.i_probas = self.i_probas[:, 0]
+
+        # this is the tolerance of the function choice
+        # https://github.com/numpy/numpy/blob/c2b6ab9924271b96d3c783f7818723a1bb8f511a/numpy/random/mtrand/mtrand.pyx#L1093
+        assert np.isclose((i_probas_sum := self.i_probas.sum()), 1., atol=1e-8), f"{i_probas_sum=}"
+        assert np.all(np.isclose(self.ij_probas.sum(axis=1), 1., atol=1e-8)), "oops"
+        assert np.all(np.isclose(self.probabilities_volume.sum(axis=2), 1., atol=1e-8)), "oops"
+
+        self.i_sequentials = np.arange(vol_shape[0])
+        self.j_sequentials = np.arange(vol_shape[1])
+        self.k_sequentials = np.arange(vol_shape[2])
+
+    def _concrete_getitem(self, n_positions: int) -> ndarray:
+        is_ = self.random_state.choice(
+            self.i_sequentials,
+            p=self.i_probas,
+            replace=True,
+            size=n_positions
+        )
+        ijs = np.c_[is_, [
+            self.random_state.choice(
+                self.j_sequentials,
+                p=self.ij_probas[i, :],
+                replace=True,
+                size=1,
+            )
+            for i in is_
+        ]]
+
+        return np.c_[ijs[:, 0], ijs[:, 1], [
+            self.random_state.choice(
+                self.k_sequentials,
+                p=self.probabilities_volume[i, j, :],
+                replace=True,
+                size=1
+            )
+            for i, j in ijs
+        ]]
+
 
 @dataclass
 class ProbabilityField3D(ABC):
@@ -242,34 +420,6 @@ class ProbabilityField3D(ABC):
             assert self.x_range is not None, f"{self.x_range=}"
             assert self.y_range is not None, f"{self.y_range=}"
             assert self.z_range is not None, f"{self.z_range=}"
-
-    # noinspection PyArgumentList
-    @classmethod
-    def _build(cls, *args, **kwargs):
-        if "grid_position_generator_" in kwargs:
-            grid_position_generator = kwargs["grid_position_generator_"]
-            logger.info(f"Building {cls.__name__} with {{x, y, z}}_range from {grid_position_generator=}")
-            return cls._build_from_grid_position_generator(*args, **kwargs)
-        else:
-            cls(*args, **kwargs)
-
-    @classmethod
-    def _build_from_grid_position_generator(cls, grid_position_generator_: GridPositionGenerator, *args, **kwargs):
-
-        if "x_range" in kwargs or "y_range" in kwargs or "z_range" in kwargs:
-            raise ValueError(
-                f"Ambiguous ranges arguments. "
-                f"If you want to build from {grid_position_generator_=} do not pass {{x, y, z}}_range kwargs."
-            )
-
-        # noinspection PyArgumentList
-        return cls(
-            *args,
-            x_range=grid_position_generator_.x_range,
-            y_range=grid_position_generator_.y_range,
-            z_range=grid_position_generator_.z_range,
-            **kwargs,
-        )
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -353,7 +503,8 @@ class VSConstantEverywhere(ProbabilityField3D):
     random_state: Optional[RandomState] = None
 
     def __post_init__(self, *args, **kwargs):
-        super(VSConstantEverywhere, self).__post_init__(*args, **kwargs)
+        # noinspection PyArgumentList
+        super().__post_init__(*args, **kwargs)
         assert -1 < self.shift < 1, f"{self.shift=}"
 
     def _concrete_getitem(self, *_):
@@ -373,6 +524,7 @@ class VSUniformEverywhere(ProbabilityField3D):
     shift_max: float = 0.
 
     def __post_init__(self, *args, **kwargs):
+        # noinspection PyArgumentList
         super(VSUniformEverywhere, self).__post_init__(*args, **kwargs)
         assert -1 < self.shift_min < 1, f"{self.shift_min=}"
         assert -1 < self.shift_max < 1, f"{self.shift_max=}"
@@ -458,6 +610,7 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
 
     def __post_init__(self, *args, **kwargs):
         args, crop_source_volume_shape = args[:-1], args[-1]
+        # noinspection PyArgumentList
         super(ET3DUniformCuboidAlmostEverywhere, self).__post_init__(*args, **kwargs)
 
         if crop_source_volume_shape is not None:
@@ -703,7 +856,7 @@ def meta2crop(
         else:
             raise NotImplementedError(f"{interpolation=} is not supported.")
 
-        crop = crop.reshape(*meta_crop.shape)
+        crop = crop.random_probas(*meta_crop.shape)
 
     # geometric_transformation
     if meta_crop.is2d:
@@ -714,15 +867,15 @@ def meta2crop(
     if meta_crop.is2d_on(0):
         sx = crop.shape[1]
         sy = crop.shape[2]
-        crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
+        crop = func(crop.random_probas(sx, sy)).random_probas(1, sx, sy)
     elif meta_crop.is2d_on(1):
         sx = crop.shape[0]
         sy = crop.shape[2]
-        crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
+        crop = func(crop.random_probas(sx, sy)).random_probas(sx, 1, sy)
     elif meta_crop.is2d_on(2):
         sx = crop.shape[0]
         sy = crop.shape[1]
-        crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
+        crop = func(crop.random_probas(sx, sy)).random_probas(sx, sy, 1)
     else:
         crop = func(crop)
 
@@ -945,7 +1098,23 @@ class VolumeCropSequence(Sequence):
                 raise NotImplementedError()  # the function here below needs to be revised
                 # labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
 
-            X[idx] = data_crop.reshape(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
+            X[idx] = data_crop.random_probas(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
             y[idx] = labels_crop
 
         return X, y
+
+
+if __name__ == "__main__":
+
+    n = 500
+    random_probas = np.random.rand(n ** 3).reshape(n, n, n)
+    random_probas /= (random_probas.sum())
+    random_probas /= (random_probas.sum())
+    gpg = VoxelwiseProbabilityGridPotion(
+        x_range=(0, n),
+        y_range=(0, n),
+        z_range=(0, n),
+        probabilities_volume=random_probas,
+        random_state=np.random.RandomState(42),
+    )
+    print(gpg.get(16))
