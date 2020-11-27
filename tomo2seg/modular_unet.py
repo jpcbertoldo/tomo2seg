@@ -262,3 +262,31 @@ kwargs_vanilla01 = dict(
     unet_down_kwargs={},
     unet_up_kwargs={},
 )
+
+kwargs_vanilla02 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=False,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
+        batch_norm=True,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)
+
+kwargs_vanilla03 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=True,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
+        batch_norm=True,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)
