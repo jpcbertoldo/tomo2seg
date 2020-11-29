@@ -856,10 +856,10 @@ def meta2crop(
         else:
             raise NotImplementedError(f"{interpolation=} is not supported.")
 
-        crop = crop.random_probas(*meta_crop.shape)
+        crop = crop.reshape(*meta_crop.shape)
 
     # geometric_transformation
-    if meta_crop.is2d:
+    if isinstance(meta_crop.gt, GT2D):
         func = _GT2D_VAL2FUNC[meta_crop.gt.value]
     else:
         raise NotImplementedError(f"Please implement {GT3D.__name__} transformations.")
@@ -867,15 +867,15 @@ def meta2crop(
     if meta_crop.is2d_on(0):
         sx = crop.shape[1]
         sy = crop.shape[2]
-        crop = func(crop.random_probas(sx, sy)).random_probas(1, sx, sy)
+        crop = func(crop.reshape(sx, sy)).reshape(1, sx, sy)
     elif meta_crop.is2d_on(1):
         sx = crop.shape[0]
         sy = crop.shape[2]
-        crop = func(crop.random_probas(sx, sy)).random_probas(sx, 1, sy)
+        crop = func(crop.reshape(sx, sy)).reshape(sx, 1, sy)
     elif meta_crop.is2d_on(2):
         sx = crop.shape[0]
         sy = crop.shape[1]
-        crop = func(crop.random_probas(sx, sy)).random_probas(sx, sy, 1)
+        crop = func(crop.reshape(sx, sy)).reshape(sx, sy, 1)
     else:
         crop = func(crop)
 
@@ -959,6 +959,7 @@ class VolumeCropSequence(Sequence):
     meta_crops_hist_path: Optional[Path] = None
 
     output_as_2d: bool = False
+    output_as_2halfd: bool = False
     use_labels_ohe: bool = False
     debug__no_data_check: InitVar[bool] = False
 
@@ -967,6 +968,19 @@ class VolumeCropSequence(Sequence):
         return self.meta_crop_generator.crop_shape
 
     def __post_init__(self, debug__no_data_check):
+
+        assert not (self.output_as_2d and self.output_as_2halfd), "Choose only one or none of them."
+
+        if self.output_as_2halfd and not self.meta_crop_generator.crop_shape[2] == 1:
+            raise NotImplementedError("only xy-2d crops for now")
+
+        if self.output_as_2halfd:
+            assert (nlayers := self.meta_crop_generator.crop_shape[2]) % 2 == 1, f"{nlayers=} must be odd."
+            assert nlayers > 1, f"{nlayers=} is not 2.5d!"
+
+            # here we can assume nlayers to be odd and at least 3
+            # it is supposed that the middle layer is the target
+            self.target_layer_idx = (nlayers - 1) // 2
 
         logger.debug(f"Initializing {self.__class__.__name__}.")
 
@@ -1037,6 +1051,10 @@ class VolumeCropSequence(Sequence):
 
     def __getitem__(self, index):
         """Generate one batch of data."""
+        (X, y), _ = self.__getitem_with_meta__(index)
+        return X, y
+
+    def __getitem_with_meta__(self, index):
 
         batch_meta_crops = self.meta_crop_generator.get(self.batch_size)
         self.meta_crops_hist_buffer.append(batch_meta_crops)
@@ -1046,11 +1064,36 @@ class VolumeCropSequence(Sequence):
         n_classes = len(self.labels)
 
         if self.output_as_2d:
+
+            if not batch_meta_crops[0].is2d_on(2):
+                raise NotImplementedError("todo implement support for non-xy-2d!")
+
             target_x_shape = (
                 self.batch_size,
                 self.crop_shape[0],
                 self.crop_shape[1],
                 1  # mono-channel for now todo make it multichannel
+            )
+            target_y_shape = tuple(
+                [
+                    self.batch_size,
+                    self.crop_shape[0],
+                    self.crop_shape[1],
+                ] + self.use_labels_ohe * [n_classes]
+            )
+
+        elif self.output_as_2halfd:
+
+            if not batch_meta_crops[0].is2d_on(2):
+                raise NotImplementedError("todo implement support for non-xy-2d!")
+
+            target_x_shape = (
+                self.batch_size,
+                self.crop_shape[0],
+                self.crop_shape[1],
+                self.crop_shape[2],
+                # the layers are the channels here
+                # todo make it *actually* multichannel
             )
             target_y_shape = tuple(
                 [
@@ -1093,15 +1136,23 @@ class VolumeCropSequence(Sequence):
                     (data_crop[0, :, :], labels_crop[0, :, :]) if meta_crop.is2d_on(0) else
                     (data_crop, labels_crop)
                 )
+            elif self.output_as_2halfd:
+
+                data_crop, labels_crop = (
+                    (data_crop, labels_crop[:, :, self.target_layer_idx]) if meta_crop.is2d_on(2) else
+                    (data_crop, labels_crop[:, self.target_layer_idx, :]) if meta_crop.is2d_on(1) else
+                    (data_crop, labels_crop[self.target_layer_idx, :, :]) if meta_crop.is2d_on(0) else
+                    (data_crop, labels_crop)
+                )
 
             if self.use_labels_ohe:
                 raise NotImplementedError()  # the function here below needs to be revised
                 # labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
 
-            X[idx] = data_crop.random_probas(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
+            X[idx] = data_crop.reshape(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
             y[idx] = labels_crop
 
-        return X, y
+        return (X, y), batch_meta_crops
 
 
 if __name__ == "__main__":
