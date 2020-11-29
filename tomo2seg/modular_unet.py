@@ -77,7 +77,7 @@ def generic_unet_block(name, nb_filters_1, nb_filters_2, convlayer: ConvLayer, k
     return fn
 
 
-def generic_unet_down(conv_sampling, convlayer, nb_filters, name):
+def generic_unet_down(conv_sampling, convlayer, nb_filters, name, batchnorm=False):
     if conv_sampling:
 
         if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
@@ -93,7 +93,13 @@ def generic_unet_down(conv_sampling, convlayer, nb_filters, name):
             raise ValueError("When conv_sampling is True, nb_filters should be given")
 
         def fn(tensor):
-            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-DOWN")(tensor)
+            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-DOWN")(tensor)            
+        
+            if batchnorm:
+                x = layers.BatchNormalization(name=f"{name}-DOWN-bn")(x)
+            
+            x = layers.Activation("relu", name=f"{name}-DOWN-relu")(x)
+
             return x
 
     else:
@@ -110,13 +116,13 @@ def generic_unet_down(conv_sampling, convlayer, nb_filters, name):
             raise ValueError(f"{convlayer=}")
 
         def fn(tensor):
-            x = max_pooling(pool_size=pool_size, name=f"{name}-DOWN")(tensor)
+            x = max_pooling(pool_size=pool_size, name=f"{name}-DOWN")(tensor)            
             return x
 
     return fn
 
 
-def generic_unet_up(conv_sampling, convlayer, nb_filters, name):
+def generic_unet_up(conv_sampling, convlayer, nb_filters, name, batchnorm=False):
     if conv_sampling:
 
         if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
@@ -132,7 +138,13 @@ def generic_unet_up(conv_sampling, convlayer, nb_filters, name):
             raise ValueError("When conv_sampling is True, nb_filters should be given")
 
         def fn(tensor):
-            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-UP")(tensor)
+            x = conv_layer(nb_filters, kernel_size=3, padding="same", strides=2, name=f"{name}-UP")(tensor)            
+        
+            if batchnorm:
+                x = layers.BatchNormalization(name=f"{name}-UP-bn")(x)
+            
+            x = layers.Activation("relu", name=f"{name}-UP-relu")(x)
+
             return x
 
     else:
@@ -171,7 +183,7 @@ def u_net(
     multiples of 16.
 
     todo make this multichannel enabled
-"""
+    """
     unet_block_kwargs = {
         **unet_block_kwargs,
         **dict(convlayer=convlayer)
@@ -261,4 +273,36 @@ kwargs_vanilla01 = dict(
     ),
     unet_down_kwargs={},
     unet_up_kwargs={},
+)
+
+kwargs_vanilla02 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=False,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
+        batch_norm=True,
+        dropout=0,
+    ),
+    unet_down_kwargs={},
+    unet_up_kwargs={},
+)
+
+kwargs_vanilla03 = dict(
+    depth=4,
+    sigma_noise=0,
+    updown_conv_sampling=True,
+    unet_block_kwargs=dict(
+        kernel_size=3,
+        res=True,
+        batch_norm=True,
+        dropout=0,
+    ),
+    unet_down_kwargs=dict(
+        batchnorm=True
+    ),
+    unet_up_kwargs=dict(
+        batchnorm=True
+    ),
 )
