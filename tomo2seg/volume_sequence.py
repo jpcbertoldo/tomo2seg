@@ -12,6 +12,7 @@ from functools import partial
 from itertools import combinations, product
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Callable, Type, Union, ClassVar
+from copy import deepcopy
 
 # Installed packages
 import numpy as np
@@ -45,9 +46,9 @@ _GT2D_FUNCTIONS: Dict[GT2D, Callable[[ndarray], ndarray]] = {
     GT2D.rotation90: partial(np.rot90, axes=(0, 1), k=1),
     GT2D.flip_horizontal: partial(np.flip, axis=0),
     GT2D.flip_vertical: partial(np.flip, axis=1),
-    GT2D.transpose: partial(np.transpose, axes=(0, 1)),
+    GT2D.transpose: partial(np.transpose, axes=(1, 0)),
 }
-
+    
 
 def _compose(f: Callable, g: Callable) -> Callable:
     """(f, g) -> fog"""
@@ -78,14 +79,288 @@ _GT2D_VAL2FUNC = {
 }
 
 
+_GT2HALFD_FUNCTIONS = deepcopy(_GT2D_FUNCTIONS)
+_GT2HALFD_FUNCTIONS.update({
+    GT2D.transpose: partial(np.transpose, axes=(1, 0, 2)),
+})
+_GT2HALFD_FUNCTIONS.update({
+    GT2D.flip_horizontal__transpose: _compose(
+        f=_GT2HALFD_FUNCTIONS[GT2D.flip_horizontal],
+        g=_GT2HALFD_FUNCTIONS[GT2D.transpose]
+    ),
+})
+
+_GT2HALFD_VAL2FUNC = {
+    gt.value: func for gt, func in _GT2HALFD_FUNCTIONS.items()
+}
+
+
 def _get_random_gt_2d(random_state: RandomState) -> GT2D:
     """todo make this batch-enabled"""
     return random_state.choice(GT2D, 1, replace=False)[0]
 
 
 class GT3D(Enum):
-    """Canonical 3D Geometric Transformation. Any other one is equivalent to these."""
+    """
+    Canonical 3D Geometric Transformation. Any other one is equivalent to these.
+    To find the groups (of equivalent transformation combinations) I exhaustively
+    tried all the combinations of 3 with the simple transformations.
+    The code to reproduce it is under tomo2seg/scratches/gt3d_groups.py.
+    """
+
+    # simple transformations
     identity = 0
+
+    #    x-axis-based
+    rotx90 = 10
+    rotx180 = 11
+    flipx = 12
+    transpose_yz = 13
+
+    #    y-axis-based
+    roty90 = 20
+    roty180 = 21
+    flipy = 22
+    transpose_xz = 23
+
+    #    z-axis-based
+    rotz90 = 30
+    rotz180 = 31
+    flipz = 32
+    transpose_xy = 33
+
+    #    3-axes transpositions
+    transpose_yzx = 100
+    transpose_zxy = 101
+
+    # combinations of 2 (30)
+    rotx90_rotx180 = 1000
+    rotx90_flipx = 1001
+    rotx90_flipy = 1002
+    rotx90_transpose_xz = 1003
+    rotx90_rotz90 = 1004
+    rotx90_transpose_xy = 1005
+    rotx90_transpose_yzx = 1006
+    rotx90_transpose_zxy = 1007
+    rotx180_flipx = 1008
+    rotx180_transpose_xz = 1009
+    rotx180_rotz90 = 1010
+    rotx180_transpose_xy = 1011
+    rotx180_transpose_yzx = 1012
+    rotx180_transpose_zxy = 1013
+    flipx_transpose_yz = 1014
+    flipx_roty90 = 1015
+    flipx_flipy = 1016
+    flipx_transpose_xz = 1017
+    flipx_flipz = 1018
+    flipx_transpose_yzx = 1019
+    flipx_transpose_zxy = 1020
+    roty90_rotx180 = 1021
+    roty90_transpose_yz = 1022
+    roty90_transpose_xy = 1023
+    roty90_transpose_zxy = 1024
+    flipy_rotz90 = 1025
+    transpose_xz_rotx180 = 1026
+    rotz90_roty90 = 1027
+    rotz90_flipz = 1028
+    transpose_zxy_rotx180 = 1029
+
+    # combinations of 3 (5)
+    rotx90_rotx180_flipx = 2000
+    rotx90_flipx_flipy = 2001
+    rotx90_flipx_transpose_xz = 2002
+    rotx90_flipy_rotz90 = 2003
+    rotx90_transpose_xz_rotx180 = 2004
+
+
+# a dictionary of transformations so that they can be referenced with a string key
+_GT3D_FUNCTIONS: Dict[GT3D, Callable[[ndarray], ndarray]] = {
+    GT3D.identity: lambda x: x,  # identity
+
+    GT3D.rotx90: partial(np.rot90, axes=(1, 2), k=1),
+    GT3D.rotx180: partial(np.rot90, axes=(1, 2), k=2),
+    GT3D.flipx: partial(np.flip, axis=0),
+    GT3D.transpose_yz: partial(np.transpose, axes=(0, 2, 1)),
+
+    GT3D.roty90: partial(np.rot90, axes=(2, 0), k=1),
+    GT3D.roty180: partial(np.rot90, axes=(2, 0), k=2),
+    GT3D.flipy: partial(np.flip, axis=1),
+    GT3D.transpose_xz: partial(np.transpose, axes=(2, 1, 0)),
+
+    GT3D.rotz90: partial(np.rot90, axes=(0, 1), k=1),
+    GT3D.rotz180: partial(np.rot90, axes=(0, 1), k=2),
+    GT3D.flipz: partial(np.flip, axis=2),
+    GT3D.transpose_xy: partial(np.transpose, axes=(1, 0, 2)),
+
+    GT3D.transpose_yzx: partial(np.transpose, axes=(1, 2, 0)),
+    GT3D.transpose_zxy: partial(np.transpose, axes=(2, 0, 1)),
+}
+
+# composed transformations - any other combination will result in something equivalent to these here
+_GT3D_FUNCTIONS.update({
+    # combinations of 2 (30)
+    GT3D.rotx90_rotx180: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.rotx180],
+    ),
+    GT3D.rotx90_flipx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.flipx],
+    ),
+    GT3D.rotx90_flipy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.flipy],
+    ),
+    GT3D.rotx90_transpose_xz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+    ),
+    GT3D.rotx90_rotz90: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.rotz90],
+    ),
+    GT3D.rotx90_transpose_xy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+    ),
+    GT3D.rotx90_transpose_yzx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+    ),
+    GT3D.rotx90_transpose_zxy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+    ),
+    GT3D.rotx180_flipx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.flipx],
+    ),
+    GT3D.rotx180_transpose_xz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+    ),
+    GT3D.rotx180_rotz90: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.rotz90],
+    ),
+    GT3D.rotx180_transpose_xy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+    ),
+    GT3D.rotx180_transpose_yzx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+    ),
+    GT3D.rotx180_transpose_zxy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx180],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+    ),
+    GT3D.flipx_transpose_yz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
+    ),
+    GT3D.flipx_roty90: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.roty90],
+    ),
+    GT3D.flipx_flipy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.flipy],
+    ),
+    GT3D.flipx_transpose_xz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+    ),
+    GT3D.flipx_flipz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.flipz],
+    ),
+    GT3D.flipx_transpose_yzx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+    ),
+    GT3D.flipx_transpose_zxy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipx],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+    ),
+    GT3D.roty90_rotx180: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.roty90],
+        g=_GT3D_FUNCTIONS[GT3D.rotx180],
+    ),
+    GT3D.roty90_transpose_yz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.roty90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
+    ),
+    GT3D.roty90_transpose_xy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.roty90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+    ),
+    GT3D.roty90_transpose_zxy: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.roty90],
+        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+    ),
+    GT3D.flipy_rotz90: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.flipy],
+        g=_GT3D_FUNCTIONS[GT3D.rotz90],
+    ),
+    GT3D.transpose_xz_rotx180: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+        g=_GT3D_FUNCTIONS[GT3D.rotx180],
+    ),
+    GT3D.rotz90_roty90: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotz90],
+        g=_GT3D_FUNCTIONS[GT3D.roty90],
+    ),
+    GT3D.rotz90_flipz: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotz90],
+        g=_GT3D_FUNCTIONS[GT3D.flipz],
+    ),
+    GT3D.transpose_zxy_rotx180: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+        g=_GT3D_FUNCTIONS[GT3D.rotx180],
+    ),
+
+    # combinations of 3 (5)
+    GT3D.rotx90_rotx180_flipx: _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180],
+            g=_GT3D_FUNCTIONS[GT3D.flipx],
+        ),
+    ),
+    GT3D.rotx90_flipx_flipy:  _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx],
+            g=_GT3D_FUNCTIONS[GT3D.flipy],
+        ),
+    ),
+    GT3D.rotx90_flipx_transpose_xz:  _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx],
+            g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+        ),
+    ),
+    GT3D.rotx90_flipy_rotz90:  _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipy],
+            g=_GT3D_FUNCTIONS[GT3D.rotz90],
+        ),
+    ),
+    GT3D.rotx90_transpose_xz_rotx180:  _compose(
+        f=_GT3D_FUNCTIONS[GT3D.rotx90],
+        g=_compose(
+            f=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+            g=_GT3D_FUNCTIONS[GT3D.rotx180],
+        ),
+    ),
+})
+
+_GT3D_VAL2FUNC = {
+    gt.value: func for gt, func in _GT3D_FUNCTIONS.items()
+}
 
 
 def _get_random_gt_3d(random_state: RandomState) -> GT3D:
@@ -128,7 +403,7 @@ class GridPositionGenerator(ABC):
     def get(self, n: int) -> ndarray:  # (n, 3)
         assert n > 0
         grid_positions = self._concrete_getitem(n)
-        assert grid_positions.shape == (n, 3)
+        assert grid_positions.shape == (n, 3), f"{self.__class__.__name__=} {n=} {grid_positions.shape=}"
         return grid_positions
 
     @abstractmethod
@@ -210,6 +485,8 @@ class SequentialGridPosition(GridPositionGenerator):
     def _concrete_getitem(self, n: int) -> ndarray:
         positions = self.positions[self.current_position:(new_current := self.current_position + n)]
         self.current_position = new_current if new_current < len(self.positions) else 0
+        if len(positions) < n:
+            positions = np.r_[positions, (n - len(positions)) * [positions[-1, :]]]
         return positions
 
     @classmethod
@@ -471,7 +748,7 @@ class GTUniformEverywhere(ProbabilityField3D):
             return _get_random_gt_2d(random_state=self.random_state)
 
         elif self.gt_type == GT3D:
-            raise NotImplementedError("GT3D not implemented yet.")
+            return _get_random_gt_3d(random_state=self.random_state)
 
         else:
             raise ValueError(f"Unknown type of Geometric Transformation. {self.gt_type=}")
@@ -683,7 +960,7 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
 
 @dataclass
 class MetaCrop3D:
-    csv_header: ClassVar[str] = "x,y,z,et,gt_type,gt,vs"
+    csv_header: ClassVar[str] = "x,y,z,et,gt_type,gt,vs,is_2halfd"
 
     x: slice
     y: slice
@@ -691,6 +968,8 @@ class MetaCrop3D:
     et: Optional[ET]
     gt: Union[GT2D, GT3D]
     vs: float  # shift on the normalized range [0, 1]
+    
+    is_2halfd: bool = False
 
     @property
     def slice(self) -> Tuple[slice, slice, slice]:
@@ -745,7 +1024,7 @@ class MetaCrop3D:
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
-        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs}"
+        return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs},{self.is_2halfd}"
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -860,9 +1139,13 @@ def meta2crop(
 
     # geometric_transformation
     if isinstance(meta_crop.gt, GT2D):
-        func = _GT2D_VAL2FUNC[meta_crop.gt.value]
+        if meta_crop.is_2halfd:
+            func = _GT2HALFD_VAL2FUNC[meta_crop.gt.value]
+        else:
+            func = _GT2D_VAL2FUNC[meta_crop.gt.value]
+        
     else:
-        raise NotImplementedError(f"Please implement {GT3D.__name__} transformations.")
+        func = _GT3D_VAL2FUNC[meta_crop.gt.value]
 
     if meta_crop.is2d_on(0):
         sx = crop.shape[1]
@@ -897,6 +1180,8 @@ class MetaCrop3DGenerator:
     et_field: ProbabilityField3D
     gt_field: ProbabilityField3D
     vs_field: ProbabilityField3D
+    
+    is_2halfd: bool = False
 
     def __post_init__(self):
 
@@ -932,6 +1217,7 @@ class MetaCrop3DGenerator:
                 et=self.et_field[x, y, z],
                 gt=self.gt_field[x, y, z],
                 vs=self.vs_field[x, y, z],
+                is_2halfd=self.is_2halfd,
             )
             for x, y, z in x0y0z0_array
         ]
@@ -971,12 +1257,20 @@ class VolumeCropSequence(Sequence):
 
         assert not (self.output_as_2d and self.output_as_2halfd), "Choose only one or none of them."
 
-        if self.output_as_2halfd and not self.meta_crop_generator.crop_shape[2] == 1:
-            raise NotImplementedError("only xy-2d crops for now")
-
+        if self.output_as_2d:
+            assert (
+                self.meta_crop_generator.crop_shape[0] == 1 
+                or self.meta_crop_generator.crop_shape[1] == 1 
+                or self.meta_crop_generator.crop_shape[2] == 1 
+            ), f"{self.meta_crop_generator.crop_shape=} not compatible with {self.output_as_2d=}, at least one axis must be of size 1."
+            
         if self.output_as_2halfd:
+            logger.warning(f"{self.output_as_2halfd=} only xy layers is available for 2.5d now!")
+            
             assert (nlayers := self.meta_crop_generator.crop_shape[2]) % 2 == 1, f"{nlayers=} must be odd."
             assert nlayers > 1, f"{nlayers=} is not 2.5d!"
+            
+            assert self.meta_crop_generator.is_2halfd, "Oops, you gotta be consistent with your choices."
 
             # here we can assume nlayers to be odd and at least 3
             # it is supposed that the middle layer is the target
@@ -1083,10 +1377,7 @@ class VolumeCropSequence(Sequence):
             )
 
         elif self.output_as_2halfd:
-
-            if not batch_meta_crops[0].is2d_on(2):
-                raise NotImplementedError("todo implement support for non-xy-2d!")
-
+            
             target_x_shape = (
                 self.batch_size,
                 self.crop_shape[0],
@@ -1109,7 +1400,7 @@ class VolumeCropSequence(Sequence):
                 self.crop_shape[0],
                 self.crop_shape[1],
                 self.crop_shape[2],
-                1  # mono-channel for now todo make it multichannel
+                # 1  # mono-channel for now todo make it multichannel
             )
             target_y_shape = tuple(
                 [
@@ -1136,20 +1427,20 @@ class VolumeCropSequence(Sequence):
                     (data_crop[0, :, :], labels_crop[0, :, :]) if meta_crop.is2d_on(0) else
                     (data_crop, labels_crop)
                 )
+                data_crop_target_shape = tuple(list(data_crop.shape) + [1])
+                data_crop = data_crop.reshape(data_crop_target_shape)
+                
             elif self.output_as_2halfd:
-
-                data_crop, labels_crop = (
-                    (data_crop, labels_crop[:, :, self.target_layer_idx]) if meta_crop.is2d_on(2) else
-                    (data_crop, labels_crop[:, self.target_layer_idx, :]) if meta_crop.is2d_on(1) else
-                    (data_crop, labels_crop[self.target_layer_idx, :, :]) if meta_crop.is2d_on(0) else
-                    (data_crop, labels_crop)
-                )
+                labels_crop = labels_crop[:, :, self.target_layer_idx]
+                
+            else:
+                pass
 
             if self.use_labels_ohe:
                 raise NotImplementedError()  # the function here below needs to be revised
                 # labels_crop = _labels_single2multi_channel(labels_crop, self.labels)
 
-            X[idx] = data_crop.reshape(tuple(list(data_crop.shape) + [1]))  # add the channel dimension
+            X[idx] = data_crop  # add the channel dimension
             y[idx] = labels_crop
 
         return (X, y), batch_meta_crops

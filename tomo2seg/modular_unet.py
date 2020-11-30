@@ -242,7 +242,14 @@ def u_net(
     if sigma_noise > 0:
         x = layers.GaussianNoise(sigma_noise, name="gaussian-noise")(x)
 
-    x = layers.Conv2D(output_channels, 1, activation="softmax", name="out")(x)
+    if convlayer in (ConvLayer.conv2d, ConvLayer.conv2d_separable):
+        x = layers.Conv2D(output_channels, 1, activation="softmax", name="out")(x)
+
+    elif convlayer in (ConvLayer.conv3d, ConvLayer.conv3d_separable):
+        x = layers.Conv3D(output_channels, 1, activation="softmax", name="out")(x)
+
+    else:
+        raise ValueError(f"{convlayer=}")
 
     return Model(x0, x, name=name)
 
