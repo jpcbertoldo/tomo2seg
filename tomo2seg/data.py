@@ -268,6 +268,8 @@ class Volume:
 
         return vol
 
+    def grid_position_probabilities_path(self, partition: SetPartition, crop_shape: Tuple[int, int, int], version: str) -> Path:
+        return self.dir / f"{self.fullname}.grid-position-probabilities.partition={partition.alias}.crop-shape={crop_shape}.version={version}.npy"
 
 @dataclass
 class EstimationVolume(YAMLObject):
