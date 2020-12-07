@@ -585,6 +585,128 @@ class SliceDataPredictionDisplay(Display):
 
 
 @dataclass
+class OrthogonalSlicesPredictionDisplay(Display):
+
+    volume_data: ndarray
+    volume_prediction: ndarray
+    volume_name: str
+    n_classes: int
+    is_probability: bool = False
+    x: Optional[int] = None
+    y: Optional[int] = None
+    z: Optional[int] = None
+    xy_axes_: Axes = field(init=False)
+    yz_axes_: Axes = field(init=False)
+    xz_axes_: Axes = field(init=False)
+
+    def __post_init__(self):
+        assert self.volume_data.shape == self.volume_prediction.shape, f"{self.volume_data.shape=} {self.volume_prediction.shape=}"
+        (width, height, depth) = self.volume_data.shape
+        self.x, self.y, self.z = self.x or int(width // 2), self.y or int(height // 2), self.z or int(depth // 2)
+        assert 0 <= self.x < self.volume_data.shape[0], f"{self.x=} out of range {self.volume_data.shape[0]=})"
+        assert 0 <= self.y < self.volume_data.shape[1], f"{self.y=} out of range {self.volume_data.shape[1]=})"
+        assert 0 <= self.z < self.volume_data.shape[2], f"{self.z=} out of range {self.volume_data.shape[2]=})"
+
+    @property
+    def title(self) -> str:
+        return f"{self.volume_name}.orthogonal-slices-display.x={self.x}-y={self.y}-z={self.z}"
+
+    def plot(self, axs: ndarray = None, with_cuts=True, data_imshow_kwargs: dict = None, pred_imshow_kwargs: dict = None,
+             cut_lines_kwargs: dict = None) -> "OrthogonalSlicesDisplay":
+        
+        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+
+        # noinspection PyShadowingNames
+        import matplotlib.pyplot as plt
+
+        if axs is None:
+            fig, axs = plt.subplots(3, 2)
+        else:
+            fig: Figure = axs[0, 0].figure
+            assert isinstance(axs, ndarray)
+            assert axs.shape == (3, 2)
+            assert all(isinstance(obj, Axes) for obj in axs.ravel())
+
+        xy_axes: Axes = axs[0, :]
+        yz_axes: Axes = axs[1, :]
+        xz_axes: Axes = axs[2, :]
+
+        self.fig_ = fig
+        self.axs_ = axs
+        self.xy_axes_, self.yz_axes_, self.xz_axes_ = xy_axes, yz_axes, xz_axes
+
+        data_imshow_kwargs_ = {
+            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=1),
+            **(data_imshow_kwargs or {})
+        }  # override with user-given kwargs
+
+        slice_xy = self.volume_data[:, :, self.z].T
+        slice_yz = self.volume_data[self.x, :, :]
+        slice_xz = self.volume_data[:, self.y, :].T
+
+        # noinspection PyArgumentList
+        self.plots_["xy_slice_data"] = xy_axes[0].imshow(slice_xy, **data_imshow_kwargs_)
+        # noinspection PyArgumentList
+        self.plots_["yz_slice_data"] = yz_axes[0].imshow(slice_yz, **data_imshow_kwargs_)
+        # noinspection PyArgumentList
+        self.plots_["xz_slice_data"] = xz_axes[0].imshow(slice_xz, **data_imshow_kwargs_)
+
+        pred_imshow_kwargs = {
+            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=(1 if self.is_probability else self.n_classes - 1)),
+            **(pred_imshow_kwargs or {})
+        }  # override with user-given kwargs
+
+        slice_xy_pred = self.volume_prediction[:, :, self.z].T
+        slice_yz_pred = self.volume_prediction[self.x, :, :]
+        slice_xz_pred = self.volume_prediction[:, self.y, :].T
+
+        # noinspection PyArgumentList
+        self.plots_["xy_slice_pred"] = xy_axes[1].imshow(slice_xy_pred, **pred_imshow_kwargs)
+        # noinspection PyArgumentList
+        self.plots_["yz_slice_pred"] = yz_axes[1].imshow(slice_yz_pred, **pred_imshow_kwargs)
+        # noinspection PyArgumentList
+        self.plots_["xz_slice_pred"] = xz_axes[1].imshow(slice_xz_pred, **pred_imshow_kwargs)
+
+        spines_specs_dict = dict(linewidth=4)
+
+        xy_axes[0].set_xlabel("x")
+        xy_axes[0].set_ylabel("y")
+        xy_axes[0].set_title(f"XY :: z={self.z}", fontdict=dict(color='g'))
+
+        yz_axes[0].set_xlabel("z")
+        yz_axes[0].set_ylabel("y")
+        yz_axes[0].set_title(f"YZ :: x={self.x}", fontdict=dict(color='r'))
+
+        xz_axes[0].set_xlabel("x")
+        xz_axes[0].set_ylabel("z")
+        xz_axes[0].set_title(f"XZ :: y={self.y}", fontdict=dict(color='b'))
+
+        if with_cuts:
+            axes_list = [xy_axes[0], yz_axes[0], xz_axes[0]]
+            lims = [(axis.get_xlim(), axis.get_ylim()) for axis in axes_list]
+            cut_lines_kwargs = {
+                **dict(linestyles="--", linewidth=4),
+                **(cut_lines_kwargs or {})
+            }
+            xy_axes[0].vlines(self.x, 0, slice_xy.shape[0], color='r', **cut_lines_kwargs)
+            xy_axes[0].hlines(self.y, 0, slice_xy.shape[1], color='b', **cut_lines_kwargs)
+            yz_axes[0].vlines(self.z, 0, slice_yz.shape[0], color='g', **cut_lines_kwargs)
+            yz_axes[0].hlines(self.y, 0, slice_yz.shape[1], color='b', **cut_lines_kwargs)
+            xz_axes[0].vlines(self.x, 0, slice_xz.shape[0], color='r', **cut_lines_kwargs)
+            xz_axes[0].hlines(self.z, 0, slice_xz.shape[1], color='g', **cut_lines_kwargs)
+            plt.setp(xy_axes[0].spines.values(), color="g", **spines_specs_dict)
+            plt.setp(yz_axes[0].spines.values(), color="r", **spines_specs_dict)
+            plt.setp(xz_axes[0].spines.values(), color="b", **spines_specs_dict)
+            for axis, lim in zip(axes_list, lims):
+                axis.set_xlim(lim[0])
+                axis.set_ylim(lim[1])
+
+        fig.suptitle(f"Orthogonal slices\nVolume: {self.volume_name}")
+
+        return self
+
+
+@dataclass
 class ClassImbalanceDisplay(Display):
 
     volume_name: str

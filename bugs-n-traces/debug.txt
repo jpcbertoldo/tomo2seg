@@ -1,0 +1,68 @@
+2020-12-02 12:27:45.136212: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-12-02 12:27:45.151043: F ./tensorflow/core/kernels/conv_2d_gpu.h:970] Non-OK-status: GpuLaunchKernel( SwapDimension1And2InTensor3UsingTiles<T, kNumThreads, kTileSize, kTileSize, conjugate>, total_tiles_count, kNumThreads, 0, d.stream(), input, input_dims, output) status: Internal: invalid configuration argument
+[1]    118225 abort (core dumped)  ~/projects/tomo2seg/condaenv/bin/python3.8 process-volume-00.py
+
+
+
+
+
+
+
+
+DEBUG::tomo2seg::{process-volume-00.py:<module>:454}::[2020-12-02::12:27:43.166]
+modelin_target_shape=(1, 48, 48, 48, 1)
+
+2020-12-02 12:27:45.136212: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-12-02 12:27:45.151043: F ./tensorflow/core/kernels/conv_2d_gpu.h:970] Non-OK-status: GpuLaunchKernel( SwapDimension1And2InTensor3UsingTiles<T, kNumThreads, kTileSize, kTileSize, conjugate>, total_tiles_count, kNumThreads, 0, d.stream(), input, input_dims, output) status: Internal: invalid configuration argument
+[1]    118225 abort (core dumped)  ~/projects/tomo2seg/condaenv/bin/python3.8 process-volume-00.py
+
+
+
+
+
+
+
+
+
+
+
+Last few lines of output with the TF_CPP_MIN_VLOG_LEVEL=2 environment variable set:
+
+
+INFO::tomo2seg::{process-volume-00.py:<module>:121}::[2020-12-02::12:37:57.350]
+model_type.name='input3d'
+
+2020-12-02 12:37:57.491135: I tensorflow/core/framework/log_memory.cc:34] __LOG_MEMORY__ MemoryLogTensorAllocation { step_id: -6 kernel_name: "Unknown" tensor { dtype: DT_INT32 shape { dim { size: 5 } } allocation_description { requested_bytes: 20 allocated_bytes: 20 allocator_name: "cpu" allocation_id: 1 has_single_reference: true ptr: 94550293425408 } } }
+2020-12-02 12:37:57.491253: I tensorflow/core/framework/log_memory.cc:34] __LOG_MEMORY__ MemoryLogTensorAllocation { step_id: -6 kernel_name: "Unknown" tensor { dtype: DT_FLOAT shape { } allocation_description { requested_bytes: 4 allocated_bytes: 4 allocator_name: "cpu" allocation_id: 2 has_single_reference: true ptr: 94550293682752 } } }
+2020-12-02 12:37:57.491343: I tensorflow/core/framework/log_memory.cc:34] __LOG_MEMORY__ MemoryLogTensorAllocation { step_id: -6 kernel_name: "Unknown" tensor { dtype: DT_FLOAT shape { } allocation_description { requested_bytes: 4 allocated_bytes: 4 allocator_name: "cpu" allocation_id: 3 has_single_reference: true ptr: 94550293671424 } } }
+2020-12-02 12:37:57.491547: I tensorflow/core/common_runtime/eager/execute.cc:501] Executing op RandomUniform in device /job:localhost/replica:0/task:0/device:GPU:0
+2020-12-02 12:37:57.491619: I tensorflow/core/framework/op_kernel.cc:1605] Instantiating kernel for node: {{node RandomUniform}} = RandomUniform[T=DT_INT32, dtype=DT_FLOAT, seed=0, seed2=0](dummy_input)
+2020-12-02 12:37:57.492146: I tensorflow/core/common_runtime/bfc_allocator.cc:229] AllocateRaw GPU_0_bfc  1028
+2020-12-02 12:37:57.492814: I tensorflow/stream_executor/cuda/cuda_driver.cc:763] failed to allocate 42.31M (44367872 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2020-12-02 12:37:57.492836: I tensorflow/stream_executor/stream_executor_pimpl.cc:486] Called StreamExecutor::Allocate(size=44367872, memory_space=0) returns 0
+2020-12-02 12:37:57.493392: I tensorflow/stream_executor/cuda/cuda_driver.cc:763] failed to allocate 38.08M (39931136 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2020-12-02 12:37:57.493410: I tensorflow/stream_executor/stream_executor_pimpl.cc:486] Called StreamExecutor::Allocate(size=39931136, memory_space=0) returns 0
+2020-12-02 12:37:57.493987: I tensorflow/stream_executor/cuda/cuda_driver.cc:763] failed to allocate 34.27M (35938048 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2020-12-02 12:37:57.494003: I tensorflow/stream_executor/stream_executor_pimpl.cc:486] Called StreamExecutor::Allocate(size=35938048, memory_space=0) returns 0
+2020-12-02 12:37:57.494412: I tensorflow/stream_executor/cuda/cuda_driver.cc:769] allocated 0x7f19e6000000 for context 0x55fe3351d070 of 32344320 bytes
+2020-12-02 12:37:57.494434: I tensorflow/stream_executor/stream_executor_pimpl.cc:486] Called StreamExecutor::Allocate(size=32344320, memory_space=0) returns 0x7f19e6000000
+2020-12-02 12:37:57.494453: I tensorflow/core/common_runtime/bfc_allocator.cc:149] Extending allocation by 30.85MiB bytes.
+2020-12-02 12:37:57.494466: I tensorflow/core/common_runtime/bfc_allocator.cc:153] Total allocated bytes: 30.85MiB
+2020-12-02 12:37:57.494477: I tensorflow/core/common_runtime/bfc_allocator.cc:156] Allocated memory at 0x7f19e6000000 to 0x7f19e7ed8900
+2020-12-02 12:37:57.494596: I tensorflow/stream_executor/stream_executor_pimpl.cc:582] Called StreamExecutor::SynchronousMemZero(location=0x7ffc5c46b7e0, size=1028)
+2020-12-02 12:37:57.494659: I tensorflow/core/common_runtime/gpu/gpu_device.cc:497] GpuDevice::ComputeHelper RandomUniform op RandomUniform on GPU 0 stream[0]
+2020-12-02 12:37:57.494699: I tensorflow/core/common_runtime/bfc_allocator.cc:229] AllocateRaw GPU_0_bfc  864
+2020-12-02 12:37:57.494745: I tensorflow/core/framework/log_memory.cc:34] __LOG_MEMORY__ MemoryLogTensorAllocation { kernel_name: "RandomUniform" tensor { dtype: DT_FLOAT shape { dim { size: 3 } dim { size: 3 } dim { size: 3 } dim { size: 1 } dim { size: 8 } } allocation_description { requested_bytes: 864 allocated_bytes: 1024 allocator_name: "GPU_0_bfc" allocation_id: 2 has_single_reference: true ptr: 139749209670912 } } }
+2020-12-02 12:37:57.503718: F ./tensorflow/core/kernels/random_op_gpu.h:232] Non-OK-status: GpuLaunchKernel(FillPhiloxRandomKernelLaunch<Distribution>, num_blocks, block_size, 0, d.stream(), gen, data, size, dist) status: Internal: out of memory
+[2]    119039 abort (core dumped)  TF_CPP_MIN_VLOG_LEVEL=2 ~/projects/tomo2seg/condaenv/bin/python3.8 
+
+
+
+
+
+
+
+
+it worked with crop 16 16 16 and bs 2
+but not with bs 1
+

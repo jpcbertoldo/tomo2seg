@@ -21,7 +21,7 @@ class Model:
     @classmethod
     def build_from_model_name(cls, name: str):
         master_name, version, fold_str, runid_str = name.split(".")
-        fold = int(fold_str)
+        fold = int(fold_str.split("fold")[1])
         runid = int("".join(runid_str.split("-")))
         return cls(
             master_name, version, fold, runid

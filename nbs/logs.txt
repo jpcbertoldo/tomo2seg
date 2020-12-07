@@ -1,0 +1,24 @@
+INFO::tomo2seg::{process-volume-00.py:<module>:072}::[2020-12-02::12:37:16.725]
+runid=1606909036
+
+DEBUG::tomo2seg::{process-volume-00.py:<module>:078}::[2020-12-02::12:37:16.725]
+tf.__version__='2.2.0'
+
+INFO::tomo2seg::{process-volume-00.py:<module>:079}::[2020-12-02::12:37:16.772]
+Num GPUs Available: 2
+This should be 2 on R790-TOMO.
+
+DEBUG::tomo2seg::{process-volume-00.py:<module>:080}::[2020-12-02::12:37:17.004]
+Both here should return 2 devices...
+tf.config.list_physical_devices('GPU')=[PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU'), PhysicalDevice(name='/physical_device:GPU:1', device_type='GPU')]
+tf.config.list_logical_devices('GPU')=[LogicalDevice(name='/device:GPU:0', device_type='GPU'), LogicalDevice(name='/device:GPU:1', device_type='GPU')]
+
+DEBUG::tomo2seg::{process-volume-00.py:<module>:088}::[2020-12-02::12:37:17.008]
+strategy=<tensorflow.python.distribute.mirrored_strategy.MirroredStrategy object at 0x7fae851e2d60>
+
+INFO::tomo2seg::{process-volume-00.py:<module>:118}::[2020-12-02::12:37:17.009]
+tomo2seg_model=Model(master_name='unet3d', version='vanilla03-f08', fold=0, runid=1606842005, factory_function=None, factory_kwargs=None)
+
+INFO::tomo2seg::{process-volume-00.py:<module>:121}::[2020-12-02::12:37:17.009]
+model_type.name='input3d'
+

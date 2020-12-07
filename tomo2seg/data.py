@@ -239,15 +239,12 @@ class Volume:
         # the minimal files required
         error_paths: List[Path] = [
             vol.data_path,
-            vol.labels_path,
             vol.info_path,
             vol.metadata_path,
         ]
 
         # these are not essential but important
         warning_paths: List[Path] = [
-            # train
-            vol.weights_path,
         ]
 
         for p in error_paths:
@@ -270,6 +267,7 @@ class Volume:
 
     def grid_position_probabilities_path(self, partition: SetPartition, crop_shape: Tuple[int, int, int], version: str) -> Path:
         return self.dir / f"{self.fullname}.grid-position-probabilities.partition={partition.alias}.crop-shape={crop_shape}.version={version}.npy"
+
 
 @dataclass
 class EstimationVolume(YAMLObject):
