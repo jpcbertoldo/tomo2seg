@@ -213,6 +213,26 @@ class Volume:
     def set_partitions(self) -> Dict[str, dict]:
         return self.metadata.set_partitions
 
+    def __getitem__(self, partition_alias) -> SetPartition:
+        try:
+            partition_dict = self.set_partitions[partition_alias]
+
+        except KeyError as ex:
+
+            if ex.args[0] != partition_alias:
+                raise ex
+
+            raise KeyError(f"{partition_alias=} not available. Pick one from {list(self.set_partitions.keys())}")
+
+        except TypeError as ex:
+
+            if ex.args[0] != "'NoneType' object is not subscriptable":
+                raise ex
+
+            raise KeyError(f"No partitions were defined for volume={self.fullname}")
+
+        return SetPartition.from_dict(partition_dict)
+
     @property
     def train_partition(self) -> SetPartition:
         return SetPartition.from_dict(
