@@ -25,15 +25,9 @@ class SetPartition(YAMLObject):
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
-    alias: Optional[str]
+    alias: str
 
     yaml_tag = "!SetPartition"
-
-    @property
-    def canonical_alias(self) -> str:
-        return f"x:{self.x_range[0]}:{self.x_range[1]}-" \
-               f"y:{self.y_range[0]}:{self.y_range[1]}-" \
-               f"z:{self.z_range[0]}:{self.z_range[1]}"
 
     @classmethod
     def z_partitioned_only(cls, x_size: int, y_size: int, z_min: int, z_max: int, alias=None) -> "SetPartition":
@@ -130,12 +124,19 @@ class Volume:
     version: Optional[str] = None
     _metadata: Optional["Volume.Metadata"] = None
 
+    @staticmethod
+    def name_pieces2fullname(name: str, version: Optional[str]) -> str:
+        if version is not None:
+            return f"{name}.{version}"
+        else:
+            return f"{name}"
+
     @property
     def fullname(self) -> str:
-        if self.version is not None:
-            return f"{self.name}.{self.version}"
-        else:
-            return f"{self.name}"
+        return Volume.name_pieces2fullname(
+            name=self.name,
+            version=self.version,
+        )
 
     @property
     def dir(self) -> Path:
@@ -209,7 +210,7 @@ class Volume:
             yaml.dump(self._metadata, f, default_flow_style=False, indent=4)
 
     @property
-    def set_partitions(self) -> Dict[str, SetPartition]:
+    def set_partitions(self) -> Dict[str, dict]:
         return self.metadata.set_partitions
 
     @property
@@ -268,10 +269,17 @@ class Volume:
     def grid_position_probabilities_path(self, partition: SetPartition, crop_shape: Tuple[int, int, int], version: str) -> Path:
         return self.dir / f"{self.fullname}.grid-position-probabilities.partition={partition.alias}.crop-shape={crop_shape}.version={version}.npy"
 
+    @classmethod
+    def from_fullname(cls, volume_fullname: str):
+        name, version = volume_fullname.split(".")
+        return cls(name=name, version=version)
+
 
 @dataclass
 class EstimationVolume(YAMLObject):
     """"""
+
+    WHOLE_VOLUME_ALIAS: ClassVar[str] = "whole-volume"
 
     yaml_tag: ClassVar[str] = "tomo2seg.EstimationVolume"
 
@@ -282,7 +290,7 @@ class EstimationVolume(YAMLObject):
 
     @property
     def fullname(self) -> str:
-        partition_name = "whole-volume" if self.partition is None else (
+        partition_name = self.WHOLE_VOLUME_ALIAS if self.partition is None else (
             self.partition.alias or self.partition.canonical_alias
         )
         s = str(self.runid)
@@ -382,4 +390,51 @@ class EstimationVolume(YAMLObject):
             model_name=model.name,
             partition=set_partition,
             runid=runid
+        )
+
+    @classmethod
+    def from_fullname(cls, full_name: str):
+        from .model import Model
+
+        vol_name, vol_version, partition_name, model_master_name, model_version, model_fold, model_runid, runid = full_name.split(".")
+        vol_name = vol_name.split("=")[1]
+        partition_name = partition_name.split("=")[1]
+        model_master_name = model_master_name.split("=")[1]
+        runid = runid.split("=")[1]
+
+        volume_fullname = Volume.name_pieces2fullname(
+            name=vol_name,
+            version=vol_version,
+        )
+
+        model_name = Model.name_pieces2name(
+            master_name=model_master_name,
+            version=model_version,
+            fold_str=model_fold,
+            runid_str=model_runid
+        )
+
+        assert partition_name in (
+            cls.WHOLE_VOLUME_ALIAS,
+            Volume.Metadata.TRAIN_PARTITION_KEY,
+            Volume.Metadata.VAL_PARTITION_KEY,
+            Volume.Metadata.TEST_PARTITION_KEY,
+        ), f"{partition_name=}"
+
+        runid = int("".join(runid.split("-")))
+
+        if partition_name == "whole-volume":
+            partition = None
+
+        else:
+            logger.info("Creating volume object to get partition dimensions.")
+
+            volume = Volume.from_fullname(volume_fullname)
+            partition = SetPartition.from_dict(volume.set_partitions.get(partition_name))
+
+        return cls(
+            volume_fullname=volume_fullname,
+            model_name=model_name,
+            runid=runid,
+            partition=partition
         )

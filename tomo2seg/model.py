@@ -3,7 +3,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .data import models_dir
+from .data import models_dir as MODELS_DIR
+
+
+def models_dir(master_name: str) -> Path:
+    return (MODELS_DIR / master_name).absolute()
 
 
 @dataclass
@@ -31,14 +35,32 @@ class Model:
         if self.factory_function is not None and callable(self.factory_function):
             self.factory_function = f"{self.factory_function.__module__}.{self.factory_function.__name__}"
 
+    @staticmethod
+    def vars2name(master_name: str, version: str, fold: int, runid: int):
+        s = str(runid)
+        return Model.name_pieces2name(
+            master_name=master_name,
+            version=version,
+            fold_str=f"fold{fold:03d}",
+            runid_str=f"{s[:4]}-{s[4:7]}-{s[7:]}",
+        )
+
+    @staticmethod
+    def name_pieces2name(master_name: str, version: str, fold_str: str, runid_str: str):
+        return f"{master_name}.{version}.{fold_str}.{runid_str}"
+
     @property
     def name(self) -> str:
-        s = str(self.runid)
-        return f"{self.master_name}.{self.version}.fold{self.fold:03d}.{f'{s[:4]}-{s[4:7]}-{s[7:]}'}"
+        return Model.vars2name(
+            self.master_name,
+            self.version,
+            self.fold,
+            self.runid,
+        )
 
     @property
     def model_path(self) -> Path:
-        return models_dir / f"{self.name}"
+        return models_dir(master_name=self.master_name) / f"{self.name}"
 
     @property
     def model_path_str(self) -> str:
@@ -46,7 +68,7 @@ class Model:
 
     @property
     def autosaved_model_path(self) -> Path:
-        return models_dir / f"{self.name}.autosaved.hdf5"
+        return models_dir(master_name=self.master_name) / f"{self.name}.autosaved.hdf5"
 
     @property
     def autosaved_model_path_str(self) -> str:

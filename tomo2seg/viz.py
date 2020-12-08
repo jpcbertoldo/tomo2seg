@@ -770,13 +770,15 @@ class VoxelValueHistogramDisplay(Display):
     ax_log_: Axes = field(init=False)
 
     def __post_init__(self):
-        assert len(self.bins) == 256, f"{len(self.bins)=}"
+        assert isinstance(self.bins, list), f"{type(self.bins)}"
+        assert isinstance(self.values, list), f"{type(self.values)}"
+        assert len(self.bins) == 257, f"{len(self.bins)=}"
         assert len(self.values) == 256, f"{len(self.values)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)}"
+        assert max(self.bins) == 256, f"{max(self.bins)}"
 
         # i want to get the vertical borders to show up
-        self.bins += [256, 257]
+        self.bins += [257]
         self.values = [0] + self.values + [0]
 
     @property
