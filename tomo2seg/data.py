@@ -403,6 +403,14 @@ class EstimationVolume(YAMLObject):
     def get_confusion_volume_path(self, class_idx) -> Path:
         return self.dir / f"{self.fullname}.confusion-volume.class-idx={class_idx}.raw"
     
+    @property
+    def exec_log_path(self) -> Path:
+        return self.dir / f"{self.fullname}.exec.log"
+    
+    @property
+    def exec_log_path_str(self) -> str:
+        return str(self.exec_log_path)
+    
     @classmethod
     def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None, runid=None):
         return cls(

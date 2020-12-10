@@ -384,6 +384,7 @@ class ET:
 
 @dataclass
 class GridPositionGenerator(ABC):
+    
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
@@ -391,6 +392,12 @@ class GridPositionGenerator(ABC):
     def __post_init__(self):
         for axis, axis_range in zip(range(3), self.axes_ranges):
             assert axis_range[0] <= axis_range[1], f"{axis=} {axis_range=}"
+        
+        import functools
+        import operator
+        import humanize
+        npositions = functools.reduce(operator.mul, self.axes_range_sizes)
+        logger.debug(f"{self.__class__.__name__} ==> {npositions=} ({humanize.intcomma(npositions)})")
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -1221,6 +1228,73 @@ class MetaCrop3DGenerator:
             )
             for x, y, z in x0y0z0_array
         ]
+    
+    @classmethod
+    def build_setup_train00(
+        cls, 
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+    ):
+        
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=GTUniformEverywhere(
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSUniformEverywhere.build_plus_or_mines(
+                shift=1. / 255 / 2,  # half a value to both sides +/-
+                grid_position_generator=grid_pos_gen,
+                random_state=RandomState(common_random_state_seed),
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_val00(
+        cls, 
+        grid_pos_gen: GridPositionGenerator,
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+    ):
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            x0y0z0_generator=grid_pos_gen,
+            et_field=ET3DConstantEverywhere.build_no_displacement(grid_position_generator=grid_pos_gen),
+            gt_field=(
+                GTConstantEverywhere.build_gt3d_identity(grid_position_generator=grid_pos_gen) if gt_type == GT3D else
+                GTConstantEverywhere.build_gt2d_identity(grid_position_generator=grid_pos_gen) 
+            ),
+            vs_field=VSConstantEverywhere.build_no_shift(grid_position_generator=grid_pos_gen),
+            is_2halfd=is_2halfd,
+        )
+        
 
 
 @dataclass

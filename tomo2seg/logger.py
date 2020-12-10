@@ -1,6 +1,23 @@
 import logging
-from logging import Formatter, StreamHandler
+from logging import Formatter, StreamHandler, Logger
 import sys
+from pathlib import Path
+
+
+def get_formatter():
+    fmt = "%(levelname)s::%(name)s::{%(filename)s:%(funcName)s:%(lineno)03d}::[%(asctime)s.%(msecs)03d]"
+    fmt += "\n%(message)s\n"
+    date_fmt = "%Y-%m-%d::%H:%M:%S"
+    return Formatter(fmt, datefmt=date_fmt)
+
+
+def add_file_handler(logger_: Logger, file: Path) -> None:
+    logspath = str(file.absolute())
+    fh = logging.FileHandler(logspath)
+    fh.setFormatter(get_formatter())
+    logger_.addHandler(fh)
+
+    logger_.info(f"Added a new file handler to the logger. {logspath=}")
 
 
 logger = logging.getLogger("tomo2seg")
@@ -8,13 +25,8 @@ logger = logging.getLogger("tomo2seg")
 logger.handlers = []
 logger.propagate = False
 
-fmt = "%(levelname)s::%(name)s::{%(filename)s:%(funcName)s:%(lineno)03d}::[%(asctime)s.%(msecs)03d]"
-fmt += "\n%(message)s\n"
-date_fmt = "%Y-%m-%d::%H:%M:%S"
-formatter = Formatter(fmt, datefmt=date_fmt)
-
 stdout_handler = StreamHandler(sys.stdout)
-stdout_handler.setFormatter(formatter)
+stdout_handler.setFormatter(get_formatter())
 
 logger.addHandler(stdout_handler)
 

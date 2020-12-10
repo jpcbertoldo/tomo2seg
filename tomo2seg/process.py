@@ -1,5 +1,6 @@
+import time
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import reduce
 from operator import mul
@@ -8,34 +9,35 @@ from typing import Type, Optional, Tuple
 import numpy as np
 
 
-class AggregationStrategy(Enum):
-    """This identifies the strategy used to deal with overlapping probabilities."""
-    average_probabilities = 0
-
-
-class CroppingStrategy(Enum):
-    """how to pick crop the size"""
-    maximum_size = 0
-    maximum_size_reduced_overlap = 1
-
-
-# todo integrate this to the model object instead
-class ModelType(Enum):
-    input2d = 0
-    input2halfd = 1
-    input3d = 2
-
-
-@dataclass
-class ProcessVolumeOpts:
-    save_probas_by_class: bool
-    debug__save_figs: bool
-
-
 @dataclass
 class ProcessVolumeArgs:
+
+    class AggregationStrategy(Enum):
+        """This identifies the strategy used to deal with overlapping probabilities."""
+        average_probabilities = 0
+
+    class CroppingStrategy(Enum):
+        """how to pick crop the size"""
+        maximum_size = 0
+        maximum_size_reduced_overlap = 1
+
+    # todo integrate this to the model object instead
+    class ModelType(Enum):
+        input2d = 0
+        input2halfd = 1
+        input3d = 2
+
+    @dataclass
+    class ProcessVolumeOpts:
+        save_probas_by_class: bool
+        debug__save_figs: bool
+        override_batch_size: Optional[int]
+        save_logs: bool
+
     model_name: str  # the full thing
     model_type: ModelType
+
+    model_shape_min_multiple_requirement: int
 
     volume_name: str
     volume_version: str
@@ -45,10 +47,12 @@ class ProcessVolumeArgs:
     cropping_strategy: CroppingStrategy
     aggregation_strategy: AggregationStrategy
 
-    runid: int
     probabilities_dtype: Type
 
     opts: ProcessVolumeOpts
+
+    runid: int = field(default_factory=lambda: int(time.time()))
+    random_state_seed: int = 42  # did you get the reference?
 
 
 def get_largest_crop_multiple(volume_shape: Tuple[int, int, int], multiple_of: int) -> Tuple[int, int, int]:
@@ -85,4 +89,5 @@ def reduce_dimensions(shape: Tuple[int, int, int], max_nvoxels: int, multiple_of
         else:
             raise ValueError(f"Could not find a suitable shape from {original_shape=} {multiple_of=} {max_nvoxels=}. Smallest size found was {shape=} {nvoxels=}")
 
+    # noinspection PyTypeChecker
     return tuple(shape)

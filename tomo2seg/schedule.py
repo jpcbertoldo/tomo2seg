@@ -117,3 +117,21 @@ class ComposedSchedule(Schedule):
             return self.sub_schedules[-1](epoch)
 
         return self.sub_schedules[self.epoch_mapping_[epoch]](epoch)
+    
+
+def get_schedule00():
+    """
+    teeth log lr schedule
+    """
+    return ComposedSchedule(
+        offset_epoch=0,
+        sub_schedules=[
+            LogSpaceSchedule(0, wait=0, start=-4, stop=-3, n_between_scales=8), 
+            LogSpaceSchedule(10, wait=20, start=-3, stop=-4, n_between_scales=8),
+            LogSpaceSchedule(40, wait=0, start=-4, stop=-3, n_between_scales=18),
+            LogSpaceSchedule(60, wait=20, start=-3, stop=-4, n_between_scales=18),
+            LogSpaceSchedule(100, wait=0, start=-4, stop=-3, n_between_scales=18),
+            LogSpaceSchedule(120, wait=20, start=-3, stop=-4, n_between_scales=18),
+            LogSpaceSchedule(160, wait=50, start=-4, stop=-5, n_between_scales=48),
+        ]
+    )
