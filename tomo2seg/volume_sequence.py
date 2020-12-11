@@ -6,26 +6,30 @@ todo make this all with keras backend
 
 # Standard packages
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, InitVar, replace
+from copy import deepcopy
+from dataclasses import dataclass, field, InitVar
 from enum import Enum
 from functools import partial
-from itertools import combinations, product
+from itertools import product
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Callable, Type, Union, ClassVar
-from copy import deepcopy
 
 # Installed packages
 import numpy as np
+import scipy as sp
 from numpy import ndarray
 from numpy.random import RandomState
-import scipy as sp
-from scipy.interpolate import RegularGridInterpolator, griddata
+from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import map_coordinates
-import sklearn as skl
-import sklearn.preprocessing
 from tensorflow.keras.utils import Sequence
 
 from tomo2seg.logger import logger
+
+
+NORMALIZE_FACTORS = {
+    "uint8": 255,
+    "uint16": 65535,
+}
 
 
 class GT2D(Enum):
@@ -1237,8 +1241,15 @@ class MetaCrop3DGenerator:
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
+        data_original_dtype: str = "uint8",
     ):
-        
+
+        try:
+            normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
+
+        except KeyError:
+            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+
         grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
             volume_shape=volume_shape, 
             crop_shape=crop_shape,
@@ -1263,7 +1274,7 @@ class MetaCrop3DGenerator:
             ),
             
             vs_field=VSUniformEverywhere.build_plus_or_mines(
-                shift=1. / 255 / 2,  # half a value to both sides +/-
+                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
                 grid_position_generator=grid_pos_gen,
                 random_state=RandomState(common_random_state_seed),
             ),

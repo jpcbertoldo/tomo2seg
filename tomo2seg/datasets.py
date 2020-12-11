@@ -7,10 +7,16 @@ VOLUME_PRECIPITATES_DRYRUN_VAL = "PA66GF30_trans3_x__0_pag", "val"
 # composite
 VOLUME_COMPOSITE_V1 = "PA66GF30", "v1"
 VOLUME_COMPOSITE_V1_REDUCED = "PA66GF30", "v1-reduced"
+# labels version
+VOLUME_COMPOSITE_V1_LABELS_REFINED3 = "refined3"
 
+# composite without labels
 VOLUME_COMPOSITE_NEIGHBOUR = "PA66GF30", "neighbour"
 VOLUME_COMPOSITE_FLEX = "PA66GF30", "flex"
 VOLUME_COMPOSITE_BIAXE = "PA66GF30", "biaxe"
 
-# label versions
-VOLUME_COMPOSITE_V1_LABELS_REFINED3 = "refined3"
+# fracture 00 (from jordan's internship)
+VOLUME_FRACTURE00_SEGMENTED00 = "fracture00", "segmented00"
+VOLUME_FRACTURE00_SEGMENTED00_LABELS_REFINED3 = "jordan"
+
+
