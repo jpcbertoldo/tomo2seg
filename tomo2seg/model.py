@@ -75,6 +75,19 @@ class Model:
         return str(self.autosaved_model_path)
 
     @property
+    def autosaved2_model_path(self) -> Path:
+        return self.model_path / f"{self.name}.autosaved.{{epoch:03d}}-{{val_loss:.6f}}.hdf5"
+
+    @property
+    def autosaved2_model_path_str(self) -> str:
+        return str(self.autosaved2_model_path)
+
+    @property
+    def autosaved2_best_model_path(self) -> Path:
+        # return self.model_path / f"{self.name}.autosaved.{{epoch:03d}}-{{val_loss:.4f}}.hdf5"
+        raise NotImplementedError("autosaved2_best_model_path")
+
+    @property
     def logger_path(self) -> Path:
         return self.model_path / "logger.csv"
 
