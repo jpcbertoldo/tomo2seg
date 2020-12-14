@@ -774,10 +774,9 @@ class VoxelValueHistogramDisplay(Display):
         assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert len(self.values) == 256, f"{len(self.values)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)=}"
 
         # i want to get the vertical borders to show up
-        self.bins += [256, 257]
+        self.bins += [self.bins[-1] + 1, self.bins[-1] + 2]
         self.values = [0] + self.values + [0]
 
     @property
@@ -797,9 +796,9 @@ class VoxelValueHistogramDisplay(Display):
         }
         # noinspection PyArgumentList
         self.plots_["y_linear"] = ax.step(self.bins, self.values, **y_linear_kwargs)
-        ax.set_xlim(-1, 257)
-        ax.set_xticks(np.linspace(0, 256, 256 // 8 + 1))  # multiples of 8
-        ax.set_xlabel("Voxel gray value [0, 255]")
+        ax.set_xlim(-1, self.bins[-1])
+        ax.set_xticks(np.linspace(0, self.bins[-3], 256 // 16 + 1))  # multiples of 8
+        ax.set_xlabel(f"Voxel gray value [0, {self.bins[-1]}]")
 
         ax.set_ylim((0, 1.05 * max(self.values)))
         ax.set_ylabel("Proportion of voxels", color=y_linear_kwargs["color"], fontsize='large')
@@ -813,16 +812,22 @@ class VoxelValueHistogramDisplay(Display):
         self.plots_["y_log"] = axlog.step(self.bins, self.values, **y_log_kwargs)
         axlog.set_yscale("log")
         axlog.grid(axis='y', which='major', ls='--', color=y_log_kwargs["color"], alpha=.5)
+
+        log_tick_locator = plt.FixedLocator(np.logspace(-6, 0, 7))
+        axlog.yaxis.set_major_locator(log_tick_locator)
         axlog.set_yticklabels(
-            [f"10^{int(np.log10(t)):d}" for t in axlog.get_yticks()],
+            [f"{int(np.log10(t)):d}" for t in axlog.get_yticks()],
             c=y_log_kwargs["color"]
         )
+        axlog.set_ylim(1e-6, 1)
+
         axlog.set_ylabel(
-            "Proportion of voxels (log scale)",
+            "Proportion of voxels (log10 scale)",
             color=y_log_kwargs["color"],
             fontsize='large',
             rotation=-90,
-            rotation_mode="anchor"
+            rotation_mode="anchor",
+            labelpad=20,
         )
 
         ax.set_title(f"Volume data histogram\nvolume={self.volume_name}")
@@ -847,14 +852,13 @@ class VoxelValueHistogramPerClassDisplay(Display):
         assert isinstance(self.bins, list), f"{type(self.bins)}"
         assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)=}"
 
         for idx in self.labels_idx:
             assert (values_len := len(self.values_per_label[idx])) == 256, f"{values_len=} {idx=}"
             assert (values_len := len(self.values_per_label_global_proportion[idx])) == 256, f"{values_len=} {idx=}"
 
         # i want to get the vertical borders to show up
-        self.bins = copy.copy(self.bins) + [256, 257]
+        self.bins = copy.copy(self.bins) + [self.bins[-1] + 1, self.bins[-1] + 2]
         self.values_per_label = [
             [0] + copy.copy(self.values_per_label[idx]) + [0]
             for idx in self.labels_idx
@@ -887,9 +891,15 @@ class VoxelValueHistogramPerClassDisplay(Display):
                 linewidth=.75,
                 label=self.line_labels[label_idx],
             )
-            ax_per_label.set_xlim(0, 256)
-            ax_per_label.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
-            ax_per_label.set_xlabel("Voxel gray value [0, 255]")
+
+            xlim = (0, self.bins[-3])
+            ax_per_label.set_xlim(*xlim)
+
+            xticks = np.linspace(0, self.bins[-3], 256 // 16 + 1)
+            ax_per_label.set_xticks(xticks)
+
+            xlabel = f"Voxel gray value [0, {self.bins[-3]}]"
+            ax_per_label.set_xlabel(xlabel)
 
             self.plots_[f"global.{label_idx=}"] = ax_global.step(
                 self.bins,
@@ -897,9 +907,9 @@ class VoxelValueHistogramPerClassDisplay(Display):
                 linewidth=.75,
                 label=self.line_labels[label_idx],
             )
-            ax_global.set_xlim(0, 256)
-            ax_global.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
-            ax_global.set_xlabel("Voxel gray value [0, 255]")
+            ax_global.set_xlim(*xlim)
+            ax_global.set_xticks(xticks)
+            ax_global.set_xlabel(xlabel)
 
         ax_per_label.set_ybound(lower=0)
         ax_per_label.set_ylabel("Proportion of voxels *per class*", fontsize='large')
@@ -907,7 +917,6 @@ class VoxelValueHistogramPerClassDisplay(Display):
         ax_per_label.set_title("Per class proportion\neach histogram is the proportion out of those of the same label")
 
         ax_global.set_yscale('log')
-        ax_global.set_ybound(lower=0)
         ax_global.set_ylabel("Proportion of voxels *overall* (global) [log]", fontsize='large')
         ax_global.legend()
         ax_global.set_title("Global proportion\neach histogram is the proportion out of all voxels")
