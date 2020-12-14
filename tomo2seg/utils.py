@@ -43,3 +43,12 @@ def get_model_internal_nvoxel_factor(model: KerasModel) -> int:
     internal_nvoxel_factor = max_internal_nvoxels / input_nvoxels
 
     return int(np.ceil(internal_nvoxel_factor))
+
+
+def fmt_runid(runid: int) -> str:
+    s = str(runid)
+    return f"{s[:4]}-{s[4:7]}-{s[7:]}"
+
+
+def parse_runid(runid_str: str) -> int:
+    return int("".join(runid_str.split("-")))

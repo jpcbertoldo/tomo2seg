@@ -13,6 +13,7 @@ from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Callable, Type, Union, ClassVar
+import warnings
 
 # Installed packages
 import numpy as np
@@ -24,12 +25,19 @@ from scipy.ndimage import map_coordinates
 from tensorflow.keras.utils import Sequence
 
 from tomo2seg.logger import logger
+from tomo2seg.data import NORMALIZE_FACTORS
 
 
-NORMALIZE_FACTORS = {
-    "uint8": 255,
-    "uint16": 65535,
-}
+def __get_attr__(name):
+    
+    if name == "NORMALIZE_FACTORS":
+        warnings.warn(f"Please use the version in the module `data.py`.", DeprecationWarning)
+        return {
+            "uint8": 255,
+            "uint16": 65535,
+        }
+    
+    raise AttributeError(f"Module `{__name__}` does not have attribute `{name}`.")
 
 
 class GT2D(Enum):
@@ -784,6 +792,56 @@ class GTUniformEverywhere(ProbabilityField3D):
 
 
 @dataclass
+class GTUniformEverywhere2(ProbabilityField3D):
+    
+    gt_type: Type = GT3D  # GT2D or GT3D
+    gt_name_list: List[str] = field(default_factory=lambda: []) # the names
+        
+    def __post_init__(self, *args, **kwargs):
+        # noinspection PyArgumentList
+        super().__post_init__(*args, **kwargs)
+        
+        for gt_name in self.gt_name_list:
+            self.gt_type[gt_name]
+        
+        logger.debug(f"{len(self.gt_name_list)=}")
+ 
+    def _concrete_getitem(self, x: int, y: int, z: int):
+        """
+        todo make this batch-enabled
+        """
+        
+        gt_name = self.random_state.choice(self.gt_name_list, 1, replace=False)[0]
+        return self.gt_type[gt_name]
+    
+    def build_all(cls, gt_type: Type, *args, **kwargs):
+        return cls(
+            *args,
+            gt_type=gt_type,
+            gt_name_list=[
+                s.lstrip(f"{gt_type.__name__}.") 
+                for s in map(str, gt_type)
+            ],
+            **kwargs,
+        )
+    
+    def gt_no_transpose_rot(cls, gt_type: Type, *args, **kwargs):
+        return cls(
+            *args,
+            gt_type=gt_type,
+            gt_name_list=[
+                s.lstrip(f"{gt_type.__name__}.") 
+                for s in map(str, gt_type)
+                # todo improve this to make sure the end shape is the same
+                if "transpose" not in s
+                and not ("rot" in s and "90" in s)
+            ],
+            **kwargs,
+        )
+
+
+    
+@dataclass
 class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
@@ -1268,6 +1326,60 @@ class MetaCrop3DGenerator:
             ),
             
             gt_field=GTUniformEverywhere(
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSUniformEverywhere.build_plus_or_mines(
+                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
+                grid_position_generator=grid_pos_gen,
+                random_state=RandomState(common_random_state_seed),
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_train01(
+        cls, 
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+        data_original_dtype: str = "uint8",
+        gt_no_transpose_rot: bool = False,
+    ):
+        """just like build_setup_train00 with an adaptation to use GTUniformEverywhere2"""
+
+        try:
+            normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
+
+        except KeyError:
+            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=gt_build_func(
+                GTUniformEverywhere2,
                 gt_type=gt_type,
                 random_state=RandomState(common_random_state_seed),
                 grid_position_generator=grid_pos_gen,

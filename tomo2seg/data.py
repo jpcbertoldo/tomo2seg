@@ -1,4 +1,5 @@
 import time
+import warnings
 from datetime import datetime
 from dataclasses import dataclass, field
 import pathlib
@@ -9,7 +10,9 @@ import yaml
 from numpy import ndarray
 from yaml import YAMLObject
 
+from . import utils
 from .logger import logger
+
 
 here = pathlib.Path(__file__).parent.resolve().absolute()
 root_dir = (here / "..").resolve()
@@ -18,6 +21,12 @@ models_dir = (data_dir / "models").resolve()
 
 data_dir.mkdir(exist_ok=True)
 models_dir.mkdir(exist_ok=True)
+
+
+NORMALIZE_FACTORS = {
+    "uint8": 255,
+    "uint16": 65535,
+}
 
 
 @dataclass
@@ -73,31 +82,7 @@ class SetPartition(YAMLObject):
 
 @dataclass
 class Volume:
-    """
-    example of usage
-
-    # prefill the function `HST_read`
-    _hst_read = functools.partial(
-        file_utils.HST_read,
-        autoparse_filename=False,  # the file names are not properly formatted
-        data_type=dtype,
-        dims=dimensions,
-        verbose=True,
-    )
-
-    # adapt it to get paths
-    hst_read = lambda x: _hst_read(str(x))
-
-    volume = Volume.with_check(*tomo2seg_data.VOLUME_PRECIPITATES_V1)
-    data_volume = hst_read(volume.data_path)
-    labels_volume = hst_read(volume.labels_path)
-
-    train_data = volume.train_partition.get_volume_partition(data_volume)
-    train_labels = volume.train_partition.get_volume_partition(labels_volume)
-
-    val_data = volume.val_partition.get_volume_partition(data_volume)
-    val_labels = volume.val_partition.get_volume_partition(labels_volume)
-    """
+    """"""
 
     def xy_reduced(self, new_width: int, new_height: int, alias=None) -> SetPartition:
         alias = alias if alias is not None else f"xy_reduced({new_width}, {new_height})"
@@ -211,18 +196,19 @@ class Volume:
 
     @property
     def set_partitions(self) -> Dict[str, dict]:
+        warnings.warn(f"{self.__class__.__name__}.set_partitions is deprecated, please use __get_item__.", DeprecationWarning)
         return self.metadata.set_partitions
 
     def __getitem__(self, partition_alias) -> SetPartition:
         try:
-            partition_dict = self.set_partitions[partition_alias]
+            partition_dict = self.metadata.set_partitions[partition_alias]
 
         except KeyError as ex:
 
             if ex.args[0] != partition_alias:
                 raise ex
 
-            raise KeyError(f"{partition_alias=} not available. Pick one from {list(self.set_partitions.keys())}")
+            raise KeyError(f"{partition_alias=} not available. Pick one from {list(self.metadata.set_partitions.keys())}")
 
         except TypeError as ex:
 
@@ -236,19 +222,19 @@ class Volume:
     @property
     def train_partition(self) -> SetPartition:
         return SetPartition.from_dict(
-            self.set_partitions[self.Metadata.TRAIN_PARTITION_KEY]
+            self.metadata.set_partitions[self.Metadata.TRAIN_PARTITION_KEY]
         )
 
     @property
     def val_partition(self) -> SetPartition:
         return SetPartition.from_dict(
-            self.set_partitions[self.Metadata.VAL_PARTITION_KEY]
+            self.metadata.set_partitions[self.Metadata.VAL_PARTITION_KEY]
         )
 
     @property
     def test_partition(self) -> SetPartition:
         return SetPartition.from_dict(
-            self.set_partitions[self.Metadata.TEST_PARTITION_KEY]
+            self.metadata.set_partitions[self.Metadata.TEST_PARTITION_KEY]
         )
 
     @classmethod
@@ -293,6 +279,14 @@ class Volume:
     def from_fullname(cls, volume_fullname: str):
         name, version = volume_fullname.split(".")
         return cls(name=name, version=version)
+    
+    @property
+    def nclasses(self) -> int:
+        return len(self.metadata.labels)
+    
+    @property
+    def normalization_factor(self) -> int:
+        return NORMALIZE_FACTORS[self.metadata.dtype]
 
 
 @dataclass
@@ -313,8 +307,8 @@ class EstimationVolume(YAMLObject):
         partition_name = self.WHOLE_VOLUME_ALIAS if self.partition is None else (
             self.partition.alias or self.partition.canonical_alias
         )
-        s = str(self.runid)
-        return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.runid={s[:4]}-{s[4:7]}-{s[7:]}"
+        runid = utils.fmt_runid(self.runid)
+        return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.{runid=}"
 
     @property
     def dir(self) -> Path:
@@ -449,7 +443,7 @@ class EstimationVolume(YAMLObject):
             Volume.Metadata.TEST_PARTITION_KEY,
         ), f"{partition_name=}"
 
-        runid = int("".join(runid.split("-")))
+        runid = utils.parse_runid(runid)
 
         if partition_name == "whole-volume":
             partition = None

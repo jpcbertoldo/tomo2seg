@@ -18,7 +18,6 @@ import numpy as np
 from matplotlib.text import Text
 from numpy import ndarray
 from sklearn.utils import check_matplotlib_support
-from tomo2seg.callbacks import History
 
 from .logger import logger
 
@@ -772,13 +771,13 @@ class VoxelValueHistogramDisplay(Display):
     def __post_init__(self):
         assert isinstance(self.bins, list), f"{type(self.bins)}"
         assert isinstance(self.values, list), f"{type(self.values)}"
-        assert len(self.bins) == 257, f"{len(self.bins)=}"
+        assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert len(self.values) == 256, f"{len(self.values)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 256, f"{max(self.bins)}"
+        assert max(self.bins) == 255, f"{max(self.bins)=}"
 
         # i want to get the vertical borders to show up
-        self.bins += [257]
+        self.bins += [256, 257]
         self.values = [0] + self.values + [0]
 
     @property
@@ -839,15 +838,16 @@ class VoxelValueHistogramPerClassDisplay(Display):
     values_per_label: List[list]
     values_per_label_global_proportion: List[list]
     labels_idx: List[int]
-    labels_names: List[str]
+    line_labels: List[str]
 
     ax_per_label_: Axes = field(init=False)
     ax_global_: Axes = field(init=False)
 
     def __post_init__(self):
+        assert isinstance(self.bins, list), f"{type(self.bins)}"
         assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)}"
+        assert max(self.bins) == 255, f"{max(self.bins)=}"
 
         for idx in self.labels_idx:
             assert (values_len := len(self.values_per_label[idx])) == 256, f"{values_len=} {idx=}"
@@ -878,14 +878,14 @@ class VoxelValueHistogramPerClassDisplay(Display):
         assert isinstance(ax_per_label, Axes), f"{ax_per_label=}"
         assert isinstance(ax_global, Axes), f"{ax_global=}"
 
-        for label_idx, label_name, label_hist, label_hist_global in zip(
-            self.labels_idx, self.labels_names, self.values_per_label, self.values_per_label_global_proportion
+        for label_idx, label_hist, label_hist_global in zip(
+            self.labels_idx, self.values_per_label, self.values_per_label_global_proportion
         ):
             self.plots_[f"per_label.{label_idx=}"] = ax_per_label.step(
                 self.bins,
                 label_hist,
                 linewidth=.75,
-                label=f"{label_name} ({label_idx=})",
+                label=self.line_labels[label_idx],
             )
             ax_per_label.set_xlim(0, 256)
             ax_per_label.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
@@ -895,7 +895,7 @@ class VoxelValueHistogramPerClassDisplay(Display):
                 self.bins,
                 label_hist_global,
                 linewidth=.75,
-                label=f"{label_name} ({label_idx=})",
+                label=self.line_labels[label_idx],
             )
             ax_global.set_xlim(0, 256)
             ax_global.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
@@ -912,6 +912,7 @@ class VoxelValueHistogramPerClassDisplay(Display):
         ax_global.legend()
         ax_global.set_title("Global proportion\neach histogram is the proportion out of all voxels")
         ax_global.grid(axis='y', which='major', ls='--', alpha=.5)
+        ax_global.set_ybound(lower=1e-6, upper=1)
 
         fig.suptitle(f"Volume data histogram per class\nvolume={self.volume_name}")
 

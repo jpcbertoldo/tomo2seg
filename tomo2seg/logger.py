@@ -1,5 +1,6 @@
 import logging
 from logging import Formatter, StreamHandler, Logger
+from pprint import PrettyPrinter
 import sys
 from pathlib import Path
 
@@ -18,6 +19,10 @@ def add_file_handler(logger_: Logger, file: Path) -> None:
     logger_.addHandler(fh)
 
     logger_.info(f"Added a new file handler to the logger. {logspath=}")
+
+
+def dict2str(dic: dict) -> str:
+    return PrettyPrinter(indent=4, compact=False).pformat(dic)
 
 
 logger = logging.getLogger("tomo2seg")

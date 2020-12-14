@@ -1,8 +1,11 @@
+import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from tomo2seg import utils
 from .data import models_dir as MODELS_DIR
 
 
@@ -26,7 +29,7 @@ class Model:
     def build_from_model_name(cls, name: str):
         master_name, version, fold_str, runid_str = name.split(".")
         fold = int(fold_str.split("fold")[1])
-        runid = int("".join(runid_str.split("-")))
+        runid = utils.parse_runid(runid_str)
         return cls(
             master_name, version, fold, runid
         )
@@ -37,12 +40,11 @@ class Model:
 
     @staticmethod
     def vars2name(master_name: str, version: str, fold: int, runid: int):
-        s = str(runid)
         return Model.name_pieces2name(
             master_name=master_name,
             version=version,
             fold_str=f"fold{fold:03d}",
-            runid_str=f"{s[:4]}-{s[4:7]}-{s[7:]}",
+            runid_str=utils.fmt_runid(runid),
         )
 
     @staticmethod
@@ -81,11 +83,25 @@ class Model:
     @property
     def autosaved2_model_path_str(self) -> str:
         return str(self.autosaved2_model_path)
+    
+    @property
+    def _autosaved2_model_filename_regex_expression(self) -> str:
+        return f"{self.name}.autosaved.\d{{3,}}-(0.\d{{6,}}).hdf5".replace(".", "\.")
 
     @property
     def autosaved2_best_model_path(self) -> Path:
-        # return self.model_path / f"{self.name}.autosaved.{{epoch:03d}}-{{val_loss:.4f}}.hdf5"
-        raise NotImplementedError("autosaved2_best_model_path")
+        
+        is_autosaved_model = re.compile(self._autosaved2_model_filename_regex_expression)
+        
+        autosaved_models = []
+
+        for filename in os.listdir(self.model_path):
+
+            if (match := is_autosaved_model.match(filename)):
+
+                autosaved_models.append((match.group(), match.groups()[0]))
+        
+        return self.model_path / min(autosaved_models, key=lambda x: x[1])[0]
 
     @property
     def logger_path(self) -> Path:
@@ -114,3 +130,7 @@ class Model:
     @property
     def train_history_plot_wip_path(self) -> Path:
         return self.model_path / "train-hist-plot-wip.png"
+
+    @property
+    def train_log_path(self) -> Path:
+        return self.model_path / f"{self.name}.train.log"
