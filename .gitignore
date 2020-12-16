@@ -131,48 +131,11 @@ dmypy.json
 
 
 data/*
+!data/.gitignore
+
 !data/models
-data/models/*.hdf5
 data/models/*
-
-
-!data/models/unet2d/
-data/models/unet2d/*
-
-data/models/unet2d/unet*/
-data/models/unet2d/unet*/*
-
-!data/models/unet2d/unet*/*.yml
-!data/models/unet2d/unet*/*.png
-!data/models/unet2d/unet*/logger.csv
-!data/models/unet2d/unet*/history.csv
-!data/models/unet2d/unet*/*.txt
-
-
-!data/models/unet2halfd/
-data/models/unet2halfd/*
-
-data/models/unet2halfd/unet*/
-data/models/unet2halfd/unet*/*
-
-!data/models/unet2halfd/unet*/*.yml
-!data/models/unet2halfd/unet*/*.png
-!data/models/unet2halfd/unet*/logger.csv
-!data/models/unet2halfd/unet*/history.csv
-!data/models/unet2halfd/unet*/*.txt
-
-
-!data/models/unet3d/
-data/models/unet3d/*
-
-data/models/unet3d/unet*/
-data/models/unet3d/unet*/*
-
-!data/models/unet3d/unet*/*.yml
-!data/models/unet3d/unet*/*.png
-!data/models/unet3d/unet*/logger.csv
-!data/models/unet3d/unet*/history.csv
-!data/models/unet3d/unet*/*.txt
+!data/models/.gitignore
 
 
 .idea/
