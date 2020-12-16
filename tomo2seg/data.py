@@ -308,7 +308,7 @@ class EstimationVolume(YAMLObject):
             self.partition.alias or self.partition.canonical_alias
         )
         runid = utils.fmt_runid(self.runid)
-        return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.{runid=}"
+        return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.runid={runid}"
 
     @property
     def dir(self) -> Path:
@@ -370,9 +370,24 @@ class EstimationVolume(YAMLObject):
     @property
     def voxelwise_classification_report_exact(self) -> Path:
         return self.dir / f"{self.fullname}.voxelwise-classification-report.exact.yaml"
-    
+
+    @property
+    def classification_report_table_exact_csv_path(self) -> Path:
+        return self.dir / f"{self.fullname}.classification-report-table.exact.csv"
+
+    @property
+    def classification_report_table_human_simple_txt_path(self) -> Path:
+        return self.dir / f"{self.fullname}.classification-report-table.human.simple.txt"
+
+    @property
+    def classification_report_table_human_detail_txt_path(self) -> Path:
+        return self.dir / f"{self.fullname}.classification-report-table.human.detail.txt"
+
     def get_class_roc_curve_path(self, class_idx: int) -> Path:
         return self.dir / f"{self.fullname}.roc-curve.class-idx={class_idx}.raw"
+
+    def get_roc_curve_csv_path(self, class_idx: int) -> Path:
+        return self.dir / f"{self.fullname}.roc-curve.class-idx={class_idx}.csv"
 
     @property
     def binary_confusion_matrices_path(self) -> Path:
@@ -396,6 +411,18 @@ class EstimationVolume(YAMLObject):
     
     def get_confusion_volume_path(self, class_idx) -> Path:
         return self.dir / f"{self.fullname}.confusion-volume.class-idx={class_idx}.raw"
+    
+    @property
+    def confusion_volume_path(self) -> Path:
+        return self.dir / f"{self.fullname}.confusion-volume.raw"
+
+    @property
+    def error_volume_path(self) -> Path:
+        return self.dir / f"{self.fullname}.error-volume.raw"
+
+    @property
+    def error_2dblobs_props_path(self) -> Path:
+        return self.dir / f"{self.fullname}.error-2dblobs-props.csv"
     
     @property
     def exec_log_path(self) -> Path:

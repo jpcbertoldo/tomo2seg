@@ -8,6 +8,8 @@ from typing import Type, Optional, Tuple
 
 import numpy as np
 
+from tomo2seg.logger import logger, dict2str
+
 
 @dataclass
 class ProcessVolumeArgs:
@@ -34,6 +36,15 @@ class ProcessVolumeArgs:
         override_batch_size: Optional[int]
         save_logs: bool
 
+        @classmethod
+        def setup00(cls):
+            return cls(
+                save_probas_by_class=False,
+                debug__save_figs=True,
+                save_logs=True,
+                override_batch_size=None,
+            )
+
     model_name: str  # the full thing
     model_type: ModelType
 
@@ -53,6 +64,22 @@ class ProcessVolumeArgs:
 
     runid: int = field(default_factory=lambda: int(time.time()))
     random_state_seed: int = 42  # did you get the reference?
+
+    @classmethod
+    def setup00_process_test(cls, **kwargs):
+        kwargs_effective = {
+            **dict(
+                model_shape_min_multiple_requirement=16,
+                partition_alias="test",
+                cropping_strategy=ProcessVolumeArgs.CroppingStrategy.maximum_size_reduced_overlap,
+                aggregation_strategy=ProcessVolumeArgs.AggregationStrategy.average_probabilities,
+                probabilities_dtype=np.float16,
+                opts=ProcessVolumeArgs.ProcessVolumeOpts.setup00(),
+            ),
+            **kwargs,
+        }
+        logger.info(f"kwargs_effective=\n{dict2str(kwargs_effective)}")
+        return cls(**kwargs_effective)
 
 
 def get_largest_crop_multiple(volume_shape: Tuple[int, int, int], multiple_of: int) -> Tuple[int, int, int]:
