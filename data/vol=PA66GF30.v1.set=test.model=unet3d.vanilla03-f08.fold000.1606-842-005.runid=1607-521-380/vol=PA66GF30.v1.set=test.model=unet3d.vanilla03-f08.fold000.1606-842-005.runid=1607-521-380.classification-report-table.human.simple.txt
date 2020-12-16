@@ -1,0 +1,8 @@
+class/average    accuracy    precision    recall    f1     roc-auc    jaccard    tp                     fp                  fn                  tn                     support        npred
+---------------  ----------  -----------  --------  -----  ---------  ---------  ---------------------  ------------------  ------------------  ---------------------  -------------  -------------
+matrix           98.9%       99.2%        99.4%     99.3%  99.9%      98.6%      332.4 million (81.9%)  2.6 million (0.6%)  2.0 million (0.5%)  68.6 million (16.9%)   334.4 million  335.0 million
+fiber            99.1%       97.5%        97.3%     97.4%  100.0%     94.9%      67.2 million (16.6%)   1.7 million (0.4%)  1.9 million (0.5%)  334.8 million (82.5%)  69.1 million   68.9 million
+porosity         99.8%       83.6%        66.3%     73.9%  99.8%      58.6%      1.4 million (0.3%)     275491 (0.1%)       716484 (0.2%)       403.2 million (99.4%)  2.1 million    1.7 million
+
+macro            99.2%       93.5%        87.6%     90.2%  99.9%      84.1%      -                      -                   -                   -                      -              -
+micro            98.9%       98.9%        98.9%     98.9%  -          -          401.0 million          4.6 million         4.6 million         806.6 million          -              -

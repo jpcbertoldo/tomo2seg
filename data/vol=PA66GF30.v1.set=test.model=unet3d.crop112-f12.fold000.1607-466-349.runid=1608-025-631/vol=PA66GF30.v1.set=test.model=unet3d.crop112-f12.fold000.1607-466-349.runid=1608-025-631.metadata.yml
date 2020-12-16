@@ -1,0 +1,557 @@
+!<tomo2seg.EstimationVolume>
+confusion_matrix_dtype: &id034 !!python/object/apply:numpy.dtype
+    args:
+    - i8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+cv_encoding:
+    ? &id001 !!python/tuple
+    - 0
+    - 0
+    : 0
+    ? &id002 !!python/tuple
+    - 0
+    - 1
+    : 1
+    ? &id003 !!python/tuple
+    - 0
+    - 2
+    : 2
+    ? &id004 !!python/tuple
+    - 1
+    - 0
+    : 100
+    ? &id005 !!python/tuple
+    - 1
+    - 1
+    : 101
+    ? &id006 !!python/tuple
+    - 1
+    - 2
+    : 102
+    ? &id007 !!python/tuple
+    - 2
+    - 0
+    : 200
+    ? &id008 !!python/tuple
+    - 2
+    - 1
+    : 201
+    ? &id009 !!python/tuple
+    - 2
+    - 2
+    : 202
+cv_encoding_inv:
+    0: *id001
+    1: *id002
+    2: *id003
+    100: *id004
+    101: *id005
+    102: *id006
+    200: *id007
+    201: *id008
+    202: *id009
+model_name: unet3d.crop112-f12.fold000.1607-466-349
+notable-slices:
+    error-blob.max-area.axis=0:
+        bbox2d: !!python/tuple
+        - &id010 !!python/object/apply:builtins.slice
+            - 238
+            - 279
+            - null
+        - &id011 !!python/object/apply:builtins.slice
+            - 21
+            - 29
+            - null
+        bbox3d: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id010
+        - *id011
+        blob-area: 136
+        centroid2d: !!python/tuple
+        - 256
+        - 24
+        centroid3d: !!python/tuple
+        - 0
+        - 256
+        - 24
+        name: error-blob.max-area.axis=0
+        normal_axis: 0
+        slice_idx: 1073
+    error-blob.max-area.axis=1:
+        bbox2d: !!python/tuple
+        - &id012 !!python/object/apply:builtins.slice
+            - 695
+            - 711
+            - null
+        - &id013 !!python/object/apply:builtins.slice
+            - 295
+            - 300
+            - null
+        bbox3d: !!python/tuple
+        - *id012
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id013
+        blob-area: 47
+        centroid2d: !!python/tuple
+        - 702
+        - 296
+        centroid3d: !!python/tuple
+        - 702
+        - 0
+        - 296
+        name: error-blob.max-area.axis=1
+        normal_axis: 1
+        slice_idx: 404
+    error-blob.max-area.axis=2:
+        bbox2d: !!python/tuple
+        - &id014 !!python/object/apply:builtins.slice
+            - 134
+            - 139
+            - null
+        - &id015 !!python/object/apply:builtins.slice
+            - 260
+            - 382
+            - null
+        bbox3d: !!python/tuple
+        - *id014
+        - *id015
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        blob-area: 420
+        centroid2d: !!python/tuple
+        - 135
+        - 319
+        centroid3d: !!python/tuple
+        - 135
+        - 319
+        - 0
+        name: error-blob.max-area.axis=2
+        normal_axis: 2
+        slice_idx: 264
+    error-blob.max-bbox-lenghth-axis=2.axis=0:
+        bbox2d: !!python/tuple
+        - &id016 !!python/object/apply:builtins.slice
+            - 1038
+            - 1040
+            - null
+        - &id017 !!python/object/apply:builtins.slice
+            - 210
+            - 229
+            - null
+        bbox3d: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id016
+        - *id017
+        blob-bbox.length.axis=2: 19
+        centroid2d: !!python/tuple
+        - 1038
+        - 219
+        centroid3d: !!python/tuple
+        - 0
+        - 1038
+        - 219
+        name: error-blob.max-bbox-lenghth-axis=2.axis=0
+        normal_axis: 0
+        slice_idx: 789
+    error-blob.max-bbox-lenghth-axis=2.axis=1:
+        bbox2d: !!python/tuple
+        - &id018 !!python/object/apply:builtins.slice
+            - 648
+            - 652
+            - null
+        - &id019 !!python/object/apply:builtins.slice
+            - 181
+            - 200
+            - null
+        bbox3d: !!python/tuple
+        - *id018
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id019
+        blob-bbox.length.axis=2: 19
+        centroid2d: !!python/tuple
+        - 650
+        - 191
+        centroid3d: !!python/tuple
+        - 650
+        - 0
+        - 191
+        name: error-blob.max-bbox-lenghth-axis=2.axis=1
+        normal_axis: 1
+        slice_idx: 228
+    error-blob.max-bbox-lenghth-axis=2.axis=2:
+        bbox2d: !!python/tuple
+        - &id020 !!python/object/apply:builtins.slice
+            - 110
+            - 124
+            - null
+        - &id021 !!python/object/apply:builtins.slice
+            - 760
+            - 884
+            - null
+        bbox3d: !!python/tuple
+        - *id020
+        - *id021
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        blob-bbox.length.axis=1: 124
+        centroid2d: !!python/tuple
+        - 116
+        - 816
+        centroid3d: !!python/tuple
+        - 116
+        - 816
+        - 0
+        name: error-blob.max-bbox-lenghth-axis=2.axis=2
+        normal_axis: 2
+        slice_idx: 247
+    error-blob.max-major-axis-length.axis=0:
+        bbox2d: !!python/tuple
+        - &id022 !!python/object/apply:builtins.slice
+            - 260
+            - 372
+            - null
+        - &id023 !!python/object/apply:builtins.slice
+            - 264
+            - 265
+            - null
+        bbox3d: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id022
+        - *id023
+        blob-major-axis-length: 129.32130528261771
+        centroid2d: !!python/tuple
+        - 315
+        - 264
+        centroid3d: !!python/tuple
+        - 0
+        - 315
+        - 264
+        name: error-blob.max-major-axis-length.axis=0
+        normal_axis: 0
+        slice_idx: 136
+    error-blob.max-major-axis-length.axis=1:
+        bbox2d: !!python/tuple
+        - &id024 !!python/object/apply:builtins.slice
+            - 789
+            - 790
+            - null
+        - &id025 !!python/object/apply:builtins.slice
+            - 210
+            - 229
+            - null
+        bbox3d: !!python/tuple
+        - *id024
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id025
+        blob-major-axis-length: 21.90890230020664
+        centroid2d: !!python/tuple
+        - 789
+        - 219
+        centroid3d: !!python/tuple
+        - 789
+        - 0
+        - 219
+        name: error-blob.max-major-axis-length.axis=1
+        normal_axis: 1
+        slice_idx: 1039
+    error-blob.max-major-axis-length.axis=2:
+        bbox2d: !!python/tuple
+        - &id026 !!python/object/apply:builtins.slice
+            - 110
+            - 124
+            - null
+        - &id027 !!python/object/apply:builtins.slice
+            - 760
+            - 884
+            - null
+        bbox3d: !!python/tuple
+        - *id026
+        - *id027
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        blob-major-axis-length: 135.09603814223885
+        centroid2d: !!python/tuple
+        - 116
+        - 816
+        centroid3d: !!python/tuple
+        - 116
+        - 816
+        - 0
+        name: error-blob.max-major-axis-length.axis=2
+        normal_axis: 2
+        slice_idx: 247
+    error-blob.max-minor-axis-length.axis=0:
+        bbox2d: !!python/tuple
+        - &id028 !!python/object/apply:builtins.slice
+            - 352
+            - 367
+            - null
+        - &id029 !!python/object/apply:builtins.slice
+            - 268
+            - 278
+            - null
+        bbox3d: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id028
+        - *id029
+        blob-minor-axis-length: 9.224884443024132
+        centroid2d: !!python/tuple
+        - 359
+        - 272
+        centroid3d: !!python/tuple
+        - 0
+        - 359
+        - 272
+        name: error-blob.max-minor-axis-length.axis=0
+        normal_axis: 0
+        slice_idx: 511
+    error-blob.max-minor-axis-length.axis=1:
+        bbox2d: !!python/tuple
+        - &id030 !!python/object/apply:builtins.slice
+            - 676
+            - 685
+            - null
+        - &id031 !!python/object/apply:builtins.slice
+            - 211
+            - 220
+            - null
+        bbox3d: !!python/tuple
+        - *id030
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        - *id031
+        blob-minor-axis-length: 8.148871448011851
+        centroid2d: !!python/tuple
+        - 679
+        - 215
+        centroid3d: !!python/tuple
+        - 679
+        - 0
+        - 215
+        name: error-blob.max-minor-axis-length.axis=1
+        normal_axis: 1
+        slice_idx: 428
+    error-blob.max-minor-axis-length.axis=2:
+        bbox2d: !!python/tuple
+        - &id032 !!python/object/apply:builtins.slice
+            - 1145
+            - 1157
+            - null
+        - &id033 !!python/object/apply:builtins.slice
+            - 754
+            - 775
+            - null
+        bbox3d: !!python/tuple
+        - *id032
+        - *id033
+        - !!python/object/apply:builtins.slice
+            - 0
+            - 1
+            - null
+        blob-minor-axis-length: 12.075014308977325
+        centroid2d: !!python/tuple
+        - 1150
+        - 762
+        centroid3d: !!python/tuple
+        - 1150
+        - 762
+        - 0
+        name: error-blob.max-minor-axis-length.axis=2
+        normal_axis: 2
+        slice_idx: 144
+    max-avg-error-blob-area.axis=0:
+        name: max-avg-error-blob-area.axis=0
+        normal_axis: 0
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    /wMAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    AAQAAAAAAAA=
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        slice-avg-error-blob-area: 4
+        slice_idx: 1023
+    max-avg-error-blob-area.axis=1:
+        name: max-avg-error-blob-area.axis=1
+        normal_axis: 1
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    AAQAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    AQQAAAAAAAA=
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        slice-avg-error-blob-area: 3
+        slice_idx: 1024
+    max-avg-error-blob-area.axis=2:
+        name: max-avg-error-blob-area.axis=2
+        normal_axis: 2
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    EgAAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    EwAAAAAAAAA=
+            - null
+        slice-avg-error-blob-area: 3
+        slice_idx: 18
+    max-error-area.axis=0:
+        name: max-error-area.axis=0
+        normal_axis: 0
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    AAAAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    AQAAAAAAAAA=
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        slice-error-area: 3778
+        slice_idx: 0
+    max-error-area.axis=1:
+        name: max-error-area.axis=1
+        normal_axis: 1
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    DwQAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    EAQAAAAAAAA=
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        slice-error-area: 5350
+        slice_idx: 1039
+    max-error-area.axis=2:
+        name: max-error-area.axis=2
+        normal_axis: 2
+        slice: !!python/tuple
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - null
+            - null
+            - null
+        - !!python/object/apply:builtins.slice
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    KwEAAAAAAAA=
+            - !!python/object/apply:numpy.core.multiarray.scalar
+                - *id034
+                - !!binary |
+                    LAEAAAAAAAA=
+            - null
+        slice-error-area: 8634
+        slice_idx: 299
+partition: !SetPartition
+    alias: test
+    x_range: !!python/tuple
+    - 0
+    - 1300
+    y_range: !!python/tuple
+    - 0
+    - 1040
+    z_range: !!python/tuple
+    - 1300
+    - 1600
+runid: 1608025631
+volume_fullname: PA66GF30.v1

@@ -11,6 +11,16 @@ VOLUME_GITIGNORE = """
 !*ground-truth-analysis*/*.png
 """
 
+ESTIMATION_VOLUME_GITIGNORE = """
+!*.metadata.yml
+!*confusion-matrix.png
+!*volumetric-fraction.png
+!*.classification-report-table.exact.csv
+!*.classification-report-table.human.detail.txt
+!*.classification-report-table.human.simple.txt
+!debug_figs/
+"""
+
 
 def is_estimation_volume(path: Path) -> bool:
     return (
@@ -100,7 +110,6 @@ models = [
     if is_model(path := master_model_dir_path / fname)
 ]
 
-logger.info("Unignoring volume files.")
 
 with (data_dir / ".gitignore").open("w") as data_gitignore:
 
@@ -108,6 +117,8 @@ with (data_dir / ".gitignore").open("w") as data_gitignore:
         "!models/\n",
         "models/*\n",
     ])
+
+    logger.info("Unignoring volume files.")
 
     for vol in volumes:
 
@@ -120,3 +131,19 @@ with (data_dir / ".gitignore").open("w") as data_gitignore:
 
         with (vol / ".gitignore").open("w") as vol_gitignore:
             vol_gitignore.write(VOLUME_GITIGNORE)
+
+    logger.info("Unignoring estimation volume files.")
+
+    for est_vol in estimation_volumes:
+
+        logger.debug(f"Unignore {est_vol.name=}")
+
+        data_gitignore.writelines([
+            f"!{est_vol.name}/\n",
+            f"{est_vol.name}/*\n",
+        ])
+
+        with (est_vol / ".gitignore").open("w") as est_vol_gitignore:
+            est_vol_gitignore.write(ESTIMATION_VOLUME_GITIGNORE)
+
+
