@@ -1,0 +1,15 @@
+!Volume.Metadata
+dimensions:
+  - 1842
+  - 1766
+  - 1946
+dtype: "uint8"
+labels:
+  - 0
+  - 1
+  - 2
+labels_names:
+  0: "matrix"
+  1: "fiber"
+  2: "porosity"
+original_name: "PA66GF30Flex3__0_pag.raw"

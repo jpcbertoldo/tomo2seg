@@ -1,0 +1,14 @@
+!models/
+models/*
+!PA66GF30.v1/
+PA66GF30.v1/*
+!PA66GF30.flex/
+PA66GF30.flex/*
+!PA66GF30.biaxe/
+PA66GF30.biaxe/*
+!PA66GF30.neighbour/
+PA66GF30.neighbour/*
+!fracture00.segmented00/
+fracture00.segmented00/*
+!PA66GF30.v1-reduced/
+PA66GF30.v1-reduced/*
