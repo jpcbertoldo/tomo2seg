@@ -228,7 +228,7 @@ def multiclass_roc_auc_score(
         logger.warning(f"{nsamples_not_close=} ({percentage_samples_not_close=:.7%})")
 
         if percentage_samples_not_close > invalid_proba_tolerance:
-            raise ValueError(f"Too many samples are not close 1 {percentage_samples_not_close=} {invalid_proba_tolerance=}.")
+            raise ValueError(f"Too many samples are not close 1 {nsamples_not_close=} {percentage_samples_not_close=:.7%} {invalid_proba_tolerance=:.7%}.")
 
         else:
             logger.warning(

@@ -431,6 +431,10 @@ class EstimationVolume(YAMLObject):
     @property
     def exec_log_path_str(self) -> str:
         return str(self.exec_log_path)
+
+    @property
+    def analyse_exec_log_path(self) -> Path:
+        return self.dir / f"{self.fullname}.analyse-exec.log"
     
     @classmethod
     def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None, runid=None):
