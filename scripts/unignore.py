@@ -21,6 +21,10 @@ ESTIMATION_VOLUME_GITIGNORE = """
 !debug_figs/
 """
 
+MODEL_GITIGNORE = """
+!*.png
+!*.txt
+"""
 
 def is_estimation_volume(path: Path) -> bool:
     return (
@@ -100,14 +104,23 @@ volumes = [
     and is_volume(path)
 ]
 
-master_model_dirs = os.listdir(models_dir)
+master_model_dirs = [
+    models_dir / name
+    for name in os.listdir(models_dir)
+]
 
 models = [
     path
-    for master_model_dir in master_model_dirs
-    if (master_model_dir_path := models_dir / master_model_dir).is_dir()
+    for master_model_dir_path in master_model_dirs
+    if master_model_dir_path.is_dir()
     for fname in os.listdir(master_model_dir_path)
     if is_model(path := master_model_dir_path / fname)
+]
+
+master_model_dirs = [
+    path
+    for path in master_model_dirs
+    if any(path.name in mod.name for mod in models)
 ]
 
 
@@ -147,3 +160,28 @@ with (data_dir / ".gitignore").open("w") as data_gitignore:
             est_vol_gitignore.write(ESTIMATION_VOLUME_GITIGNORE)
 
 
+with (models_dir / ".gitignore").open("w") as models_gitignore:
+
+    logger.info("Unignoring model files.")
+
+    for master_model_dir in master_model_dirs:
+
+        logger.debug(f"Unignore {master_model_dir.name=}")
+
+        models_gitignore.writelines([
+            f"!{master_model_dir.name}/\n",
+            f"{master_model_dir.name}/*\n",
+        ])
+
+        with (master_model_dir / ".gitignore").open("w") as master_model_gitignore:
+
+            for model in models:
+
+                master_model_gitignore.writelines([
+                    f"!{model.name}/\n",
+                    f"{model.name}/*\n",
+                ])
+
+                with (model / ".gitignore").open("w") as model_gitignore:
+
+                    model_gitignore.write(MODEL_GITIGNORE)

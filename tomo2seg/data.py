@@ -449,7 +449,18 @@ class EstimationVolume(YAMLObject):
     def from_fullname(cls, full_name: str):
         from .model import Model
 
-        vol_name, vol_version, partition_name, model_master_name, model_version, model_fold, model_runid, runid = full_name.split(".")
+        try:
+            vol_name, vol_version, partition_name, model_master_name, model_version, model_fold, model_runid, runid = full_name.split(".")
+            
+        except ValueError as ex:
+            
+            logger.exception(ex)
+            
+            if "not enough values to unpack" not in ex.args[0]:
+                raise ex
+            
+            raise ValueError(f"not an estimation volume {full_name=}")
+            
         vol_name = vol_name.split("=")[1]
         partition_name = partition_name.split("=")[1]
         model_master_name = model_master_name.split("=")[1]

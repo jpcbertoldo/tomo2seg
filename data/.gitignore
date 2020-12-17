@@ -12,8 +12,6 @@ PA66GF30.neighbour/*
 fracture00.segmented00/*
 !PA66GF30.v1-reduced/
 PA66GF30.v1-reduced/*
-!vol=PA66GF30.v1.set=test.model=unet2halfd.vanilla03-f16.fold000.1606-683-705.runid=1607-616-782/
-vol=PA66GF30.v1.set=test.model=unet2halfd.vanilla03-f16.fold000.1606-683-705.runid=1607-616-782/*
 !vol=PA66GF30.v1.set=test.model=unet2d.crop112-f16.fold000.1607-533-765.runid=1608-026-504/
 vol=PA66GF30.v1.set=test.model=unet2d.crop112-f16.fold000.1607-533-765.runid=1608-026-504/*
 !vol=PA66GF30.v1.set=test.model=unet2halfd-sep.vanilla03-f16.fold000.1606-729-672.runid=1608-021-400/
@@ -24,8 +22,6 @@ vol=PA66GF30.neighbour.set=whole-volume.model=unet2d.vanilla03-f16.fold000.1606-
 vol=PA66GF30.v1.set=test.model=unet3d.crop304-f16.fold000.1607-790-699.runid=1608-025-663/*
 !vol=PA66GF30.biaxe.set=whole-volume.model=unet2d.vanilla03-f16.fold000.1606-505-109.runid=1607-436-057/
 vol=PA66GF30.biaxe.set=whole-volume.model=unet2d.vanilla03-f16.fold000.1606-505-109.runid=1607-436-057/*
-!vol=PA66GF30.v1.set=test.model=unet2halfd-sep.vanilla03-f16.fold000.1606-729-672.runid=1607-691-979/
-vol=PA66GF30.v1.set=test.model=unet2halfd-sep.vanilla03-f16.fold000.1606-729-672.runid=1607-691-979/*
 !vol=PA66GF30.flex.set=whole-volume.model=unet2d.vanilla03-f16.fold000.1606-505-109.runid=1607-368-645/
 vol=PA66GF30.flex.set=whole-volume.model=unet2d.vanilla03-f16.fold000.1606-505-109.runid=1607-368-645/*
 !vol=PA66GF30.v1.set=test.model=unet3d.vanilla03-f16.fold000.1606-750-939.runid=1607-518-433/
