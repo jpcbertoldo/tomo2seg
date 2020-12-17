@@ -21,10 +21,60 @@ set_partitions:
   val:
     x_range: [0, 1300]
     y_range: [0, 1040]
-    z_range: [1600, 1900]
+    z_range: [1078, 1206]
     alias: "val"
   test:
     x_range: [0, 1300]
     y_range: [0, 1040]
     z_range: [1300, 1600]
     alias: "test"
+  lc_train_01250:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 128]
+    alias: "lc_train_01250"
+  lc_train_02500:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 256]
+    alias: "lc_train_02500"
+  lc_train_03750:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 384]
+    alias: "lc_train_03750"
+  lc_train_05000:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 512]
+    alias: "lc_train_05000"
+  lc_train_06250:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 640]
+    alias: "lc_train_06250"
+  lc_train_07500:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 768]
+    alias: "lc_train_07500"
+  lc_train_08750:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 896]
+    alias: "lc_train_08750"
+  lc_train_10000:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [0, 1024]
+    alias: "lc_train_10000"
+  lc_val:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [1051, 1233]
+    alias: "lc_val"
+  lc_test:
+    x_range: [0, 1296]
+    y_range: [0, 1040]
+    z_range: [1260, 1900]
+    alias: "lc_test"

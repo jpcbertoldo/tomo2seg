@@ -134,3 +134,4 @@ class Model:
     @property
     def train_log_path(self) -> Path:
         return self.model_path / f"{self.name}.train.log"
+

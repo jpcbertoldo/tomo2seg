@@ -8,6 +8,17 @@ from tomo2seg.logger import logger
 
 HOSTS_CONFIGS_YAML = "/home/users/jcasagrande/projects/tomo2seg/data/hosts.yml"
 
+# these are estimates based on things i've seen fit in the GPU
+MAX_INTERNAL_NVOXELS = max(
+    # seen cases
+    # batch_size * internal_multiplier_factor * (crop_nvoxels) / gpu_factor
+    # the gpu factor is the number of Gb of the gpu where I saw something happen
+    4 * (8 * 6) * (96**3) / 8,
+    8 * (16 * 6) * (320**2) / 8,
+    3 * (16 * 6) * (800 * 928) / 8,
+    15 * 23 * (208**2 * 5) / 5,
+)
+
 
 @dataclass
 class Host:
