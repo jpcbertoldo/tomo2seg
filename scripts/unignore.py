@@ -26,6 +26,7 @@ MODEL_GITIGNORE = """
 !*.txt
 """
 
+
 def is_estimation_volume(path: Path) -> bool:
     return (
         path.is_dir() and
