@@ -1,11 +1,18 @@
+from enum import Enum, unique
+import functools
+import operator
 import os
 import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
+import numpy as np
+
+from tensorflow.keras.models import Model as KerasModel
 
 from tomo2seg import utils
+from tomo2seg.hosts import Host
 from .data import models_dir as MODELS_DIR
 
 
@@ -13,11 +20,57 @@ def models_dir(master_name: str) -> Path:
     return (MODELS_DIR / master_name).absolute()
 
 
+@unique
+class Type(Enum):
+    
+    d2 = "2d"
+    d2half = "2.5d"
+    d3 = "3d"
+    
+    @property
+    def input_is_3d(self) -> bool:
+        
+        if self in (
+            self.d2half,
+            self.d3,
+        ):
+            return True
+        
+        elif self in (
+            self.d2,
+        ):
+            return False
+        
+        else:
+            raise NotImplemented(self)
+    
+    @property
+    def output_is_3d(self) -> bool:
+        
+        if self in (
+            self.d3,
+        ):
+            return True
+        
+        elif self in (
+            self.d2,
+            self.d2half,
+        ):
+            return False
+        
+        else:
+            raise NotImplemented(self)
+            
+            
+    
+
 @dataclass
 class Model:
 
     master_name: str
     version: str
+    
+#     type: Type
 
     fold: int = 0
     runid: int = field(default_factory=lambda: int(time.time()))
@@ -46,7 +99,7 @@ class Model:
             fold_str=f"fold{fold:03d}",
             runid_str=utils.fmt_runid(runid),
         )
-
+ 
     @staticmethod
     def name_pieces2name(master_name: str, version: str, fold_str: str, runid_str: str):
         return f"{master_name}.{version}.{fold_str}.{runid_str}"
@@ -84,14 +137,12 @@ class Model:
     def autosaved2_model_path_str(self) -> str:
         return str(self.autosaved2_model_path)
     
-    @property
-    def _autosaved2_model_filename_regex_expression(self) -> str:
-        return f"{self.name}.autosaved.\d{{3,}}-(0.\d{{6,}}).hdf5".replace(".", "\.")
+    def autosaved2_all(self, with_loss=False) -> Optional[List[Path]]:
 
-    @property
-    def autosaved2_best_model_path(self) -> Path:
+        if not self.model_path.exists():
+            return None
         
-        is_autosaved_model = re.compile(self._autosaved2_model_filename_regex_expression)
+        is_autosaved_model = re.compile(f"{self.name}.autosaved.\d{{3,}}-(0.\d{{6,}}).hdf5".replace(".", "\."))
         
         autosaved_models = []
 
@@ -100,8 +151,29 @@ class Model:
             if (match := is_autosaved_model.match(filename)):
 
                 autosaved_models.append((match.group(), match.groups()[0]))
+                
+        if len(autosaved_models) == 0:
+            return None
         
-        return self.model_path / min(autosaved_models, key=lambda x: x[1])[0]
+        return  [
+            (
+                self.model_path / m[0],
+                m[1],
+            ) 
+            if with_loss else 
+            self.model_path / m[0]
+            for m in autosaved_models
+        ]
+        
+    @property
+    def autosaved2_best_model_path(self) -> Optional[Path]:
+        
+        all_autosaved2 = self.autosaved2_all(with_loss=True)
+        
+        if all_autosaved2 is None:
+            return None
+        
+        return min(all_autosaved2, key=lambda x: x[1])[0]
 
     @property
     def logger_path(self) -> Path:
@@ -125,7 +197,11 @@ class Model:
 
     @property
     def train_metacrop_history_path(self) -> Path:
-        return self.model_path / "metacrop-history.csv"
+        return self.model_path / "metacrop-history.train.csv"
+
+    @property
+    def val_metacrop_history_path(self) -> Path:
+        return self.model_path / "metacrop-history.val.csv"
 
     @property
     def train_history_plot_wip_path(self) -> Path:
@@ -134,4 +210,18 @@ class Model:
     @property
     def train_log_path(self) -> Path:
         return self.model_path / f"{self.name}.train.log"
+    
+    
 
+
+def estimate_max_batch_size_per_gpu(model: KerasModel, max_internal_voxels: int, crop_shape: Tuple[int]) -> int:
+    
+    model_internal_nvoxel_factor = utils.get_model_internal_nvoxel_factor(model)  
+    
+    max_batch_nvoxels = int(np.floor(max_internal_voxels / model_internal_nvoxel_factor))
+
+    crop_nvoxels = functools.reduce(operator.mul, crop_shape)
+
+    return max(
+        1, int(np.floor(max_batch_nvoxels / crop_nvoxels))
+    )

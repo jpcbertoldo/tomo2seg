@@ -2,12 +2,12 @@ import time
 from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, ClassVar
+from typing import Optional, ClassVar, Type
 
 import tensorflow as tf
 
 from tomo2seg.logger import logger
-from tomo2seg.hosts import Host
+from tomo2seg.hosts import Host, get_host
 
 
 @dataclass
@@ -28,64 +28,82 @@ class BaseArgs(ABC):
         if self.random_state_seed is None:
             self.random_state_seed = int(time.time()) % 1000
             logger.info(f"Using auto random_state_seed={self.random_state_seed}")
+            
+        if self.host is None:
+            self.host = get_host()
+            logger.info(f"Using auto host={self.host.hostname=}")
 
-
+            
 @dataclass
-class TrainArgs(BaseArgs):
+class ProcessVolumeArgs(BaseArgs):
 
     # versions of the train script compatible with this class
-    versions: ClassVar = (8,)
+    versions: ClassVar = (5,)
 
-    class EarlyStopMode(Enum):
-        no_early_stop = 0
+    class AggregationStrategy(Enum):
+        """This identifies the strategy used to deal with overlapping probabilities."""
+        average_probabilities = 0
 
-    class BatchSizeMode(Enum):
-        try_max_and_fail = 0
-        try_max_and_reduce = 1
+    class CroppingStrategy(Enum):
+        """how to pick crop the size"""
+        maximum_size = 0
+        maximum_size_reduced_overlap = 1
 
-    # None: continue from the latest model
-    # 1: continue from model.autosaved_model_path
-    # 2: continue from model.autosaved2_model_path
-    # continue_from_autosave: Optional[int] = None
-    class TrainMode(Enum):
-        from_scratch = 0
-        continuation_from_autosaved_model = 1
-        continuation_from_autosaved2_best_model = 2
-        continuation_from_latest_model = 3
+    # todo integrate this to the model object instead
+    class ModelType(Enum):
+        input2d = 0
+        input2halfd = 1
+        input3d = 2
 
-        @property
-        def is_continuation(self) -> bool:
-            return self in (
-                TrainArgs.TrainMode.continuation_from_autosaved_model,
-                TrainArgs.TrainMode.continuation_from_autosaved2_best_model,
-                TrainArgs.TrainMode.continuation_from_latest_model,
+    @dataclass
+    class ProcessVolumeOpts:
+        save_probas_by_class: bool
+        debug__save_figs: bool
+        override_batch_size: Optional[int]
+        save_logs: bool
+
+        @classmethod
+        def setup00(cls):
+            return cls(
+                save_probas_by_class=False,
+                debug__save_figs=True,
+                save_logs=True,
+                override_batch_size=None,
             )
 
-    early_stop_mode: EarlyStopMode
-    batch_size_mode: BatchSizeMode
-    train_mode: TrainMode
+    model_name: str  # the full thing
+    model_type: ModelType
+
+    model_shape_min_multiple_requirement: int
 
     volume_name: str
     volume_version: str
-    labels_version: str
 
-    partition_train: str = "train"
-    partition_val: str = "val"
+    partition_alias: Optional[str]
 
-    model_fold: int = 0
+    cropping_strategy: CroppingStrategy
+    aggregation_strategy: AggregationStrategy
 
-    # override the auto-sized value
-    # this allows to reproduce reproduce the same conditions across experiments
-    batch_size_per_gpu: Optional[int] = None
+    probabilities_dtype: Type
 
-    def __post_init__(self):
+    opts: ProcessVolumeOpts
 
-        super().__post_init__()
+    @classmethod
+    def setup00_process_test(cls, **kwargs):
+        import numpy as np
+        
+        kwargs_effective = {
+            **dict(
+                model_shape_min_multiple_requirement=16,
+                partition_alias="test",
+                cropping_strategy=ProcessVolumeArgs.CroppingStrategy.maximum_size_reduced_overlap,
+                aggregation_strategy=ProcessVolumeArgs.AggregationStrategy.average_probabilities,
+                probabilities_dtype=np.float16,
+                opts=ProcessVolumeArgs.ProcessVolumeOpts.setup00(),
+            ),
+            **kwargs,
+        }
+        
+        return cls(**kwargs_effective)
 
-        if self.train_mode.is_continuation:
-            assert self.runid is not None, f"Incompatible args {self.runid=} {self.self.train_mode=}"
-
-        if self.batch_size_per_gpu is not None:
-            assert self.batch_size_per_gpu > 0, f"{self.batch_size_per_gpu=}"
-
-            ngpus = len(tf.config.list_physical_devices('GPU'))
+        

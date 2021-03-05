@@ -309,7 +309,7 @@ class TrainingHistoryDisplay(Display):
                 x_tickss = []
                 for x_axis_ in self.x_axes_:
                     x_tickss.append(tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_)))
-
+                    
                 ax.set_xticks(x_tickss[0])
                 x_tickss = [
                     [
@@ -724,7 +724,13 @@ class ClassImbalanceDisplay(Display):
     def title(self) -> str:
         return f"{self.volume_name}.class-imbalance"
 
-    def plot(self, ax=None) -> "Display":
+    def plot(
+        self, 
+        count_fmt_func, 
+        perc_fmt_func,
+        ax=None, 
+        barh_kwargs=dict(),
+    ) -> "Display":
 
         check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
 
@@ -740,16 +746,24 @@ class ClassImbalanceDisplay(Display):
         self.axs_ = ax
         self.fig_ = fig
 
-        self.plots_["barh"] = ax.barh(self.labels_idx, self.labels_counts)
-        ax.set_yticks(self.labels_idx)
-        ax.set_yticklabels([f"{self.labels_names[idx]} ({idx=})" for idx in self.labels_idx])
+        self.plots_["barh"] = ax.barh(
+            self.labels_idx, 
+            self.labels_counts,
+            **barh_kwargs,
+        )
+        ax.set_yticks([])
         ax.set_xticks([])
+        
         for idx, count in zip(self.labels_idx, self.labels_counts):
+            
             self.plots_[f"text.label_idx={idx}"] = ax.text(
-                max(self.labels_counts) // 10, idx,
-                f"{humanize.intword(count)} "
-                f"({humanize.intcomma(count)}) = {(perc := count / self.n_voxels):.0%} ({perc:.4%})",
-                fontsize="large"
+                max(self.labels_counts) // 4, 
+                idx,
+                (
+                    f"{self.labels_names[idx]} ({idx=})\n"
+                    f"{count_fmt_func(count)} ({perc_fmt_func(count / self.n_voxels)})"
+                ),
+                fontsize="medium"
             )
 
         ax.set_title(f"Class imbalance of {self.volume_name}")
@@ -798,8 +812,8 @@ class VoxelValueHistogramDisplay(Display):
         # noinspection PyArgumentList
         self.plots_["y_linear"] = ax.step(self.bins, self.values, **y_linear_kwargs)
         ax.set_xlim(-1, self.bins[-1])
-        ax.set_xticks(np.linspace(0, self.bins[-3], 256 // 16 + 1))  # multiples of 8
-        ax.set_xlabel(f"Voxel gray value [0, {self.bins[-1]}]")
+        ax.set_xticks(list(map(int, np.linspace(0, self.bins[-3], 256 // 16 + 1))))  # multiples of 8
+        ax.set_xlabel(f"Voxel gray value [0, {self.bins[-3]}]")
 
         ax.set_ylim((0, 1.05 * max(self.values)))
         ax.set_ylabel("Proportion of voxels", color=y_linear_kwargs["color"], fontsize='large')

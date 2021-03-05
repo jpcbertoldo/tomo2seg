@@ -81,6 +81,35 @@ class LogSpaceSchedule(Schedule):
 
 
 @dataclass
+class LinSpaceSchedule(Schedule):
+    """
+    """
+
+    wait: int
+    start: float
+    stop: float
+    n_between: int
+
+    schedule_: List[float] = field(init=False)
+
+    def __post_init__(self):
+        self.schedule_ = np.concatenate([
+            np.array(self.wait * [self.start]), 
+            np.linspace(self.start, self.stop, self.n_between + 2)
+        ]).tolist()
+        logger.info(f"{self.__class__.__name__} ==> {self.n=}")
+
+    @property
+    def n(self) -> int:
+        return len(self.schedule_)
+    
+    def __call__(self, epoch) -> float:
+        assert epoch >= self.offset_epoch, f"{epoch=} {self.offset_epoch=}"
+        epoch -= self.offset_epoch
+        return self.schedule_[epoch] if epoch < len(self.schedule_) else self.schedule_[-1]
+
+    
+@dataclass
 class ComposedSchedule(Schedule):
 
     sub_schedules: List[Schedule]

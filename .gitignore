@@ -140,5 +140,9 @@ data/models/*
 
 .idea/
 nbs/.archive/
+nbs/archive/
 nbs/tutorials/
+nbs/cuda/
+nbs/cuda
 
+*.h5

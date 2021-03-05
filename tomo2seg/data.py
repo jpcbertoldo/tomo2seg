@@ -370,6 +370,14 @@ class EstimationVolume(YAMLObject):
     @property
     def voxelwise_classification_report_exact(self) -> Path:
         return self.dir / f"{self.fullname}.voxelwise-classification-report.exact.yaml"
+    
+    @property
+    def notable_slices_path(self) -> Path:
+        return self.dir / f"{self.fullname}.notable-slices.yaml"
+    
+    @property
+    def notable_slices_plots(self) -> Path:
+        return self.dir / f"notable-slices-plots"
 
     @property
     def classification_report_table_exact_csv_path(self) -> Path:

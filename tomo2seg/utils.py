@@ -16,17 +16,18 @@ def get_model_internal_nvoxel_factor(model: KerasModel) -> int:
     because of the model's architecture, the memory must
     hold (N' = f * N) voxels.
     This function returns `f`.
+    todo move this to inside the model as a property
     """
 
     input_layer = model.layers[0]
 
-    logger.debug(f"{input_layer=}")
+#     logger.debug(f"{input_layer=}")
 
     assert isinstance(input_layer, KerasInputLayer), f"{input_layer.__class__=}"
 
     input_nvoxels = reduce(mul, (x for x in input_layer.input_shape[0][1:]))  # ignore the batch size
 
-    logger.debug(f"{input_nvoxels=}")
+#     logger.debug(f"{input_nvoxels=}")
 
     def get_layer_nvoxels(layer) -> int:
         return reduce(mul, (x for x in layer.output_shape[1:]))
@@ -38,7 +39,7 @@ def get_model_internal_nvoxel_factor(model: KerasModel) -> int:
 
     max_internal_nvoxels = max(internal_nvoxels)
 
-    logger.debug(f"{max_internal_nvoxels=} ({humanize.intcomma(max_internal_nvoxels)})")
+#     logger.debug(f"{max_internal_nvoxels=} ({humanize.intcomma(max_internal_nvoxels)})")
 
     internal_nvoxel_factor = max_internal_nvoxels / input_nvoxels
 

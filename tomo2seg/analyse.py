@@ -1,6 +1,6 @@
 from functools import partial
 from multiprocessing import Pool
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Callable
 
 import humanize
 import numpy as np
@@ -12,6 +12,8 @@ from sklearn import metrics
 import skimage
 import skimage.measure
 from typing import Dict, List, Union
+import pandas as pd
+from pandas import DataFrame
 
 
 # hist_bins = np.linspace(0, 256, 257).astype(int)
@@ -343,8 +345,6 @@ def get_slice_props_parallel(
 
     logger.debug(f"{normal_axis=} => {nslices=}")
 
-    logger.debug("chopping off slices")
-
     slices = []
 
     for slice_idx in range(nslices):
@@ -381,3 +381,169 @@ def get_slice_props_parallel(
         ]).tolist()
         for k in blobs2d_props[0].keys()
     }
+
+
+
+def add_notable_slices(
+    func: Callable[[pd.DataFrame], 
+    Tuple[dict, dict]], 
+    notable_slices: dict, 
+    error_2dblobs_props: DataFrame, 
+    axes=(0, 1, 2),
+):
+ 
+    for axis in axes:
+        
+        name, slice_idx, custom_attrs = func(error_2dblobs_props.loc[axis])
+
+        name += f".{axis=}"
+
+        notable_slice_dict = notable_slices[name] = {
+            "name": name,
+            "normal_axis": axis,
+            "slice_idx": int(slice_idx),
+        }
+        
+        slice_ = [slice(None), slice(None), slice(None)]
+        slice_[axis] = slice(slice_idx, slice_idx + 1)
+        slice_ = tuple(slice_)
+        
+        notable_slice_dict.update({
+            "slice": slice_,
+            **custom_attrs,
+        })
+        
+
+def add_notable_slices_blobwise(
+    func: Callable[[pd.DataFrame], 
+    Tuple[dict, dict]], 
+    notable_slices: dict, 
+    error_2dblobs_props: DataFrame, 
+    axes=(0, 1, 2),
+):
+    for axis in axes:
+        
+        name, row, custom_attrs = func(error_2dblobs_props.loc[axis])
+
+        name += f".{axis=}"
+
+        notable_slice_dict = notable_slices[name] = {
+            "name": name,
+            "normal_axis": axis,
+            "slice_idx": int(row.slice_idx),
+        }
+
+        centroid3d = tuple(
+            int(row[f"centroid-{axx}"])
+            for axx in range(3)
+        )
+
+        centroid2d = tuple(
+            val 
+            for axx, val in enumerate(centroid3d)
+            if axx != axis
+        )
+
+        bbox3d = (
+            slice(int(row[f"bbox-0"]), int(row[f"bbox-3"])),
+            slice(int(row[f"bbox-1"]), int(row[f"bbox-4"])),
+            slice(int(row[f"bbox-2"]), int(row[f"bbox-5"])),
+        )
+
+        bbox2d = tuple(
+            val 
+            for axx, val in enumerate(bbox3d)
+            if axx != axis
+        )
+
+        notable_slice_dict.update({
+            "centroid3d": centroid3d,
+            "centroid2d": centroid2d,
+            "bbox3d": bbox3d,
+            "bbox2d": bbox2d,
+            **custom_attrs,
+        })
+        
+        
+def max_area(df):
+    row = df.iloc[df.area.argmax()]
+    custom_attrs = {"blob-area": int(row["area"])}
+    return "error-blob.max-area", row, custom_attrs
+
+
+def max_bbox_shape(df, dim):
+    """bbox = bounding box"""
+    
+    bbox_shape_dim = df[f"bbox-{dim + 3}"] - df[f"bbox-{dim}"] 
+    
+    arg_max = bbox_shape_dim.argmax()
+    row = df.iloc[arg_max]
+    
+    custom_attrs = {f"blob-bbox.length.axis={dim}": int(bbox_shape_dim.iloc[arg_max])}
+    
+    return f"error-blob.max-bbox-lenghth-axis={dim}", row, custom_attrs
+
+
+def max_major_axis_length(df):
+    row = df.iloc[df.major_axis_length.argmax()]
+    custom_attrs = {"blob-major-axis-length": float(row["major_axis_length"])}
+    return "error-blob.max-major-axis-length", row, custom_attrs
+
+
+def max_minor_axis_length(df):
+    row = df.iloc[df.minor_axis_length.argmax()]
+    custom_attrs = {"blob-minor-axis-length": float(row["minor_axis_length"])}
+    return "error-blob.max-minor-axis-length", row, custom_attrs
+
+
+def max_error_area(df):
+    area_per_slice = df[["area", "slice_idx"]].groupby("slice_idx").sum()
+    slice_idx = area_per_slice.area.argmax()
+    custom_attrs = {"slice-error-area": int(area_per_slice.iloc[slice_idx].area)}
+    return "max-error-area", slice_idx, custom_attrs
+
+
+def max_error_blob_avg_area(df):
+    avg_blob_area_per_slice = df[["area", "slice_idx"]].groupby("slice_idx").mean()
+    slice_idx = avg_blob_area_per_slice.area.argmax()
+    custom_attrs = {"slice-avg-error-blob-area": int(avg_blob_area_per_slice.iloc[slice_idx].area)}
+    return "max-avg-error-blob-area", slice_idx, custom_attrs
+
+
+def get_2d_blob_props(
+    label_volume: ndarray,
+    data_volume: ndarray,
+    axes: Tuple[int] = (0, 1, 2),
+    parallel_nprocs: Optional[int] = None,
+) -> DataFrame:
+    assert min(axes) >= 0, f"{min(axes)=}"
+    assert max(axes) <= 2, f"{max(axes)=}"
+    
+    all_blob_props = []
+    
+    for axis in axes:
+        logger.info(f"computing 2d_blob_props on plane normal to {axis=}")
+        all_blob_props.append(get_slice_props_parallel(
+            label_volume, 
+            data_volume, 
+            normal_axis=axis, 
+            nprocs=parallel_nprocs,
+        ))
+
+    logger.debug("Converting 2d blob props dicts to data frames.")
+
+    for axis in axes:
+
+        blob_props = all_blob_props[axis]
+
+        ref_shape = len(blob_props["area"])
+
+        for k in blob_props.keys():
+            assert (shap := len(blob_props[k])) == ref_shape, f"{k=} {shap=} {ref_shape=}"
+
+        all_blob_props[axis] = pd.DataFrame(blob_props)
+
+        logger.debug(f"{all_blob_props[axis].shape=}")
+
+    return pd.concat(all_blob_props, axis=0)
+

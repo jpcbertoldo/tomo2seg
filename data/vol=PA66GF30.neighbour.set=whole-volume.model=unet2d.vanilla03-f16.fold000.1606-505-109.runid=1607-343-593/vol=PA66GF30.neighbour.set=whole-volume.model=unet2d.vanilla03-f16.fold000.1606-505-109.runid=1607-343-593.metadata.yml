@@ -1,6 +1,0 @@
-!<tomo2seg.EstimationVolume>
-aggregation_strategy: average_probabilities
-model_name: unet2d.vanilla03-f16.fold000.1606-505-109
-partition: null
-runid: 1607343593
-volume_fullname: PA66GF30.neighbour

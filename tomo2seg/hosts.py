@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import socket
 from typing import ClassVar
 
 import yaml
@@ -29,6 +30,11 @@ class Host:
 
 class HostsConfigsError(Exception):
     pass
+
+
+class UnknownHost(ValueError):
+    pass
+
 
 
 def get_hosts():
@@ -63,6 +69,20 @@ def get_hosts():
 
 
 hosts = get_hosts()
+
+
+def get_host(hostname: str = None) -> Host:
+    
+    if hostname is None:
+        hostname = socket.gethostname()
+    
+    assert isinstance(hostname, str) 
+    
+    try:
+        return hosts[hostname]
+    
+    except KeyError:
+        raise UnknownHost(hostname)
 
 
 if __name__ == "__main__":

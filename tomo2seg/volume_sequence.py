@@ -1093,7 +1093,15 @@ class MetaCrop3D:
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
+        # todo fix this to use ; or generalize it
         return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs},{self.is_2halfd}"
+    
+    @classmethod
+    def from_csv_line(cls, line: str) -> "MetaCrop3D":
+        pieces = line.split(";")
+#         return cls(
+#             x=
+#         )
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -1395,15 +1403,73 @@ class MetaCrop3DGenerator:
         )
     
     @classmethod
-    def build_setup_val00(
+    def build_setup_crack_train00(
         cls, 
-        grid_pos_gen: GridPositionGenerator,
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+        data_original_dtype: str = "uint8",
+        gt_no_transpose_rot: bool = False,
+    ):
+        """just like build_setup_train00 with an adaptation to use GTUniformEverywhere2 and no VS"""
+
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=gt_build_func(
+                GTUniformEverywhere2,
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSConstantEverywhere.build_no_shift(
+#                 random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_val00(cls, *args, **kwargs):
+        """this is here just for back compatibility"""
+        return cls.build_no_augmentation(*args, **kwargs)
+    
+    @classmethod
+    def build_no_augmentation(
+        cls, 
+        grid_pos_gen: Optional[GridPositionGenerator],
         volume_shape: Tuple[int, int, int], 
         crop_shape: Tuple[int, int, int], 
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
     ):
+        if grid_pos_gen is None:
+            grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+                volume_shape=volume_shape, 
+                crop_shape=crop_shape,
+                random_state=RandomState(common_random_state_seed),
+            )
         
         return cls(
             volume_shape=volume_shape,
@@ -1533,7 +1599,7 @@ class VolumeCropSequence(Sequence):
             with self.meta_crops_hist_path.open(mode='a') as f:
                 for batch_idx, batch in enumerate(self.meta_crops_hist_buffer):
                     for crop_meta in batch:
-                        f.write(f"{batch_idx},{crop_meta.to_csv_line()}")
+                        f.write(f"\n{batch_idx},{crop_meta.to_csv_line()}")
         self.meta_crops_hist_buffer = []
 
     def __len__(self):
