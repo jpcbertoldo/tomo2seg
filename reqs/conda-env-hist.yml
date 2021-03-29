@@ -14,4 +14,6 @@ dependencies:
   - imageio
   - pydot
   - tqdm
+  - ipython
+  - ipykernel
 prefix: /home/joaopcbertoldo/anaconda3/envs/tomo2seg-dev
