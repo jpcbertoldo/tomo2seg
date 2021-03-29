@@ -56,6 +56,23 @@ class TheoreticalModel(ABC):
         """
         return 1 - self.jaccard2_macroavg_coeff
 
+    @classmethod
+    def get_losses_names(cls):
+
+        global_losses = [
+            attr
+            for attr, _ in inspect.getmembers(cls)
+            if isinstance(attr, str) and attr.endswith("loss")
+        ]
+
+        classwise_losses = [
+            attr
+            for attr, _ in inspect.getmembers(cls)
+            if isinstance(attr, str) and attr.endswith("classwise_losses")
+        ]
+
+        return global_losses, classwise_losses
+
 
 @dataclass
 class UniformProbabilitiesClassifier(TheoreticalModel):
@@ -93,7 +110,6 @@ class UniformProbabilitiesClassifier(TheoreticalModel):
 class Order0Classifier(TheoreticalModel):
     """
     A classifier that only looks at the labels proportion and classifies everything as the majority class with 100%.
-    The majority class is always supposed to be the index 0.
     :attr p0: the proportion of the majority class
     """
 
@@ -117,6 +133,69 @@ class Order0Classifier(TheoreticalModel):
         p0 = self.p0
         assert 0 < p0 < 1, f"{p0=}"
         return [p0] + (self.n_classes - 1) * [0]
+
+
+@dataclass
+class MulticlassPerfectRecall(TheoreticalModel):
+    """
+    A classifier that can perfectly distinguish a subset of the classes. 
+    All the rest is confounded with one of the learned classes.
+    Therefore, some classes will have a perfect recall, while others will have
+    a 0 recall, classifying all of it as another (user-selected) class.
+   
+    :attr proportions: the proportions of each class 
+    :attr binary_confusion_matrix: the class i is classified as class j if binary_confusion_matrix[i][j] == 1
+    """
+
+    proportions: List[float]
+    binary_confusion_matrix: List[List[int]]
+
+    def __post_init__(self):
+
+        assert all(v == 0 or v == 1 for row in self.binary_confusion_matrix for v in row)
+
+        n_classes = len(self.proportions)
+
+        assert len(self.binary_confusion_matrix) == n_classes
+
+        for idx, row in enumerate(self.binary_confusion_matrix):
+            assert len(row) == n_classes, f"{idx}"
+
+        assert any(self.binary_confusion_matrix[idx][idx] == 1 for idx in range(n_classes))
+
+        for prop in self.proportions:
+
+            assert 0 < prop < 1, f"{prop}"
+
+        assert sum(self.proportions) == 1
+
+    @property
+    def jaccard2_raveled_coeff(self) -> float:
+        n_classes = len(self.proportions)
+        # n = number of samples
+        intersec = sum(
+            self.proportions[idx] 
+            for idx in range(n_classes)
+            if self.binary_confusion_matrix[idx][idx] == 1
+        )  # * n
+        # true = 1  # * n
+        # pred = 1  # * n
+        jaccard2 = intersec / (2 - intersec)
+        return jaccard2
+
+    @property
+    def jaccard2_classwise_coeffs(self) -> List[float]:
+        coeffs = []
+        n_classes = len(self.proportions)
+        for idx in range(n_classes):
+            intersection = self.proportions[idx] * self.binary_confusion_matrix[idx][idx]
+            true = self.proportions[idx]
+            pred = sum(
+                self.proportions[idx] * self.binary_confusion_matrix[row_idx][idx] 
+                for row_idx in range(n_classes)
+            )
+            coeffs.append(intersection / (true + pred - intersection))
+        return coeffs 
 
 
 @dataclass
@@ -164,53 +243,101 @@ class ValueHistogramBased(TheoreticalModel):
         pass
 
 
-# ======================================================= models =======================================================
+# ================================================ losses names / models ================================================
 
+global_losses, classwise_losses = TheoreticalModel.get_losses_names()
+losses = global_losses + classwise_losses
+models = []
 
-# todo update these with the correct values
+logger.debug(f"{global_losses=} {classwise_losses=}")
+logger.info(f"{losses=}")
+
+# ======================================================= PA66GF30 =======================================================
+
+# ============================= class distribution =============================
+
+# todo update these with the precise values
 pa66gf30_proportions = [
     .809861,  # matrix
     .189801,  # fiber
     .000338,  # porosity
 ]
 
-pa66gf30_uniform_proba = UniformProbabilitiesClassifier(
-    name="pa66gf30",
-    proportions=pa66gf30_proportions
-)
-
-pa66gf30_order0 = Order0Classifier(
-    name="pa66gf30",
-    n_classes=len(pa66gf30_proportions),
-    p0=pa66gf30_proportions[0],
-)
+# =================================== models ===================================
 
 pa66gf30_models = [
-    pa66gf30_uniform_proba,
-    pa66gf30_order0,
+    UniformProbabilitiesClassifier(
+        name="pa66gf30",
+        proportions=pa66gf30_proportions,
+    ),
+    Order0Classifier(
+        name="pa66gf30",
+        n_classes=len(pa66gf30_proportions),
+        p0=pa66gf30_proportions[0],
+    ),
+    MulticlassPerfectRecall(
+        name="pa66gf30:matrix,fiber:porosity->matrix",
+        proportions=pa66gf30_proportions,
+        binary_confusion_matrix=[
+            [1, 0, 0],
+            [0, 1, 0],
+            [1, 0, 0],
+        ],
+    )
 ]
 
-models = []
 models.extend(pa66gf30_models)
 
-# ======================================================= losses =======================================================
+# ====================================================== fracture00 ======================================================
 
-global_losses = [
-    attr
-    for attr, _ in inspect.getmembers(TheoreticalModel)
-    if isinstance(attr, str) and attr.endswith("loss")
+# ============================= class distribution =============================
+
+fracture00_proportions = [
+    .260358,  # exterior
+    .713693,  # inside
+    .021588,  # defect
+    .000163,  # porosity
+    .004198,  # crack
 ]
 
-classwise_losses = [
-    attr
-    for attr, _ in inspect.getmembers(TheoreticalModel)
-    if isinstance(attr, str) and attr.endswith("classwise_losses")
+# =================================== models ===================================
+
+fracture00_models = [
+    UniformProbabilitiesClassifier(
+        name="fracture00",
+        proportions=fracture00_proportions
+    ),
+    Order0Classifier(
+        name="fracture00",
+        n_classes=len(fracture00_proportions),
+        p0=fracture00_proportions[1],
+    ),
+    MulticlassPerfectRecall(
+        name="fracture00:exterior,inside:others->inside",
+        proportions=fracture00_proportions,
+        binary_confusion_matrix=[
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+        ],
+    ),
+    MulticlassPerfectRecall(
+        name="fracture00:exterior,inside,defect:others->inside",
+        proportions=fracture00_proportions,
+        binary_confusion_matrix=[
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+        ],
+    ),
 ]
 
-losses = global_losses + classwise_losses
+models.extend(fracture00_models)
 
-logger.debug(f"{global_losses=} {classwise_losses=}")
-logger.info(f"{losses=}")
 
 # ======================================================= table ========================================================
 
@@ -237,11 +364,11 @@ table = pd.DataFrame(
             for attr in ["fullname"]
         },
         **{
-            attr.split("_loss")[0]: [get_loss(model, attr, False) for model in models]
+            attr: [get_loss(model, attr, False) for model in models]
             for attr in global_losses
         },
         **{
-            attr.split("_losses")[0]: [get_loss(model, attr, True) for model in models]
+            attr: [get_loss(model, attr, True) for model in models]
             for attr in classwise_losses
         },
     }
