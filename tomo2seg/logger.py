@@ -25,14 +25,16 @@ def dict2str(dic: dict) -> str:
     return PrettyPrinter(indent=4, compact=False).pformat(dic)
 
 
-logger = logging.getLogger("tomo2seg")
+def config_logger(logger_: Logger) -> Logger:
+    logger_.handlers = []
+    logger_.propagate = False
 
-logger.handlers = []
-logger.propagate = False
+    stdout_handler = StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(get_formatter())
 
-stdout_handler = StreamHandler(sys.stdout)
-stdout_handler.setFormatter(get_formatter())
+    logger_.addHandler(stdout_handler)
 
-logger.addHandler(stdout_handler)
+    return logger_
 
-logger.setLevel(logging.INFO)
+
+logger = config_logger(logging.getLogger("tomo2seg"))
