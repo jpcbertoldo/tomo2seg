@@ -1,5 +1,4 @@
 # todo use full path and not relative...
 module load anaconda/conda3.7
-conda activate ./condaenv
-#source ~/.zshrc  # update prompt
+conda activate tomo2seg-dev
 
