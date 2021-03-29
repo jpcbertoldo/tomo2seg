@@ -27,5 +27,4 @@ cd "${project_root}" || exit
 
 # !!!!!!!!!!!!!!!!!!!!!!!! i should install `ipython ipykernel` as well
 
-
 # conda develop .
