@@ -1,0 +1,5 @@
+shape:
+  - 256
+  - 256
+  - 256
+byte_encoding: "littleendian"

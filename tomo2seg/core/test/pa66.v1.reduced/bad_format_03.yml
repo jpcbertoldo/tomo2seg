@@ -1,0 +1,6 @@
+shape:
+  - 256
+  - 256
+  - 256
+dtype: ""
+byte_encoding: "littleendian"

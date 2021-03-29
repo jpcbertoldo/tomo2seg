@@ -1,0 +1,6 @@
+shape:
+  - 32
+  - 32
+  - 32
+dtype: "uint16"
+byte_encoding: "littleendian"
