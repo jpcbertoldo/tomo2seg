@@ -2,12 +2,11 @@ import time
 from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, ClassVar, Type
+from typing import ClassVar, Optional, Type
 
 import tensorflow as tf
-
-from tomo2seg.logger import logger
 from tomo2seg.hosts import Host, get_host
+from tomo2seg.logger import logger
 
 
 @dataclass
@@ -28,12 +27,12 @@ class BaseArgs(ABC):
         if self.random_state_seed is None:
             self.random_state_seed = int(time.time()) % 1000
             logger.info(f"Using auto random_state_seed={self.random_state_seed}")
-            
+
         if self.host is None:
             self.host = get_host()
             logger.info(f"Using auto host={self.host.hostname=}")
 
-            
+
 @dataclass
 class ProcessVolumeArgs(BaseArgs):
 
@@ -42,10 +41,12 @@ class ProcessVolumeArgs(BaseArgs):
 
     class AggregationStrategy(Enum):
         """This identifies the strategy used to deal with overlapping probabilities."""
+
         average_probabilities = 0
 
     class CroppingStrategy(Enum):
         """how to pick crop the size"""
+
         maximum_size = 0
         maximum_size_reduced_overlap = 1
 
@@ -91,7 +92,7 @@ class ProcessVolumeArgs(BaseArgs):
     @classmethod
     def setup00_process_test(cls, **kwargs):
         import numpy as np
-        
+
         kwargs_effective = {
             **dict(
                 model_shape_min_multiple_requirement=16,
@@ -103,7 +104,5 @@ class ProcessVolumeArgs(BaseArgs):
             ),
             **kwargs,
         }
-        
-        return cls(**kwargs_effective)
 
-        
+        return cls(**kwargs_effective)

@@ -8,20 +8,19 @@ from enum import Enum
 from itertools import product
 from pathlib import Path
 from string import Template
-from typing import List, Optional, Union, Dict, Tuple, Iterable
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import humanize
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.image import AxesImage
 from matplotlib.lines import Line2D
-from matplotlib.pyplot import Figure, Axes, cm
-import numpy as np
+from matplotlib.pyplot import Axes, Figure, cm
 from matplotlib.text import Text
 from numpy import ndarray
 from sklearn.utils import check_matplotlib_support
 
 from .logger import logger
-
 
 FIGS_COMMON_METADATA = dict(
     Author="joaopcbertoldo",
@@ -32,12 +31,19 @@ FIGS_COMMON_METADATA = dict(
 
 
 def tight_subplots(n: int, m: int, w: float, h: float) -> (Figure, Axes):
-    fig, axs = plt.subplots(n, m, figsize=(w, h), sharex='all', sharey='all')
+    fig, axs = plt.subplots(n, m, figsize=(w, h), sharex="all", sharey="all")
     fig.set_tight_layout(True)
     return fig, axs
 
 
-def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray = None, normalized_voxels=False, is_color=False, vrange=None):
+def plot_orthogonal_slices(
+    axs: ndarray,
+    volume: ndarray,
+    labels_mask: ndarray = None,
+    normalized_voxels=False,
+    is_color=False,
+    vrange=None,
+):
     logger.debug(f"{volume.shape=}")
 
     vmin, vmax = (0, 1) if normalized_voxels else (0, 255) if vrange is None else vrange
@@ -57,11 +63,19 @@ def plot_orthogonal_slices(axs: ndarray, volume: ndarray, labels_mask: ndarray =
     else:
         (height, width, depth) = volume.shape
 
-    xy_z_coord, yz_x_coord, xz_y_coord = int(depth // 2), int(width // 2), int(height // 2)
+    xy_z_coord, yz_x_coord, xz_y_coord = (
+        int(depth // 2),
+        int(width // 2),
+        int(height // 2),
+    )
 
     logger.debug(f"{xy_z_coord, yz_x_coord, xz_y_coord=}")
 
-    kwargs = dict(interpolation=None) if is_color else dict(vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    kwargs = (
+        dict(interpolation=None)
+        if is_color
+        else dict(vmin=vmin, vmax=vmax, cmap=cm.gray, interpolation=None)
+    )
     xy_axis.imshow(xy_slice := volume[:, :, xy_z_coord], **kwargs)
     yz_axis.imshow(yz_slice := volume[yz_x_coord, :, :], **kwargs)
     xz_axis.imshow(np.rot90(xz_slice := volume[:, xz_y_coord, :]), **kwargs)
@@ -104,10 +118,10 @@ def display_training_curves(training, validation, title, subplot, x=None):
         # todo clean up this function
         ax.plot(x, training)
         ax.plot(x, validation)
-    ax.set_title('model '+ title)
+    ax.set_title("model " + title)
     ax.set_ylabel(title)
-    ax.set_xlabel('epoch')
-    ax.legend(['training', 'validation'])
+    ax.set_xlabel("epoch")
+    ax.legend(["training", "validation"])
 
 
 @dataclass
@@ -115,7 +129,9 @@ class Display(ABC):
 
     fig_: Figure = field(init=False)
     axs_: Union[Axes, ndarray] = field(init=False)
-    plots_: Dict[str, Union[List[Line2D], AxesImage]] = field(init=False, default_factory=dict)
+    plots_: Dict[str, Union[List[Line2D], AxesImage]] = field(
+        init=False, default_factory=dict
+    )
     creation_time: int = field(init=False, default_factory=lambda: int(time.time()))
 
     @abstractmethod
@@ -136,7 +152,9 @@ class Display(ABC):
         return {
             **FIGS_COMMON_METADATA,
             **dict(
-                CreationTimeISO=datetime.fromtimestamp(self.creation_time).isoformat(timespec='seconds'),
+                CreationTimeISO=datetime.fromtimestamp(self.creation_time).isoformat(
+                    timespec="seconds"
+                ),
                 Title=self.title,
             ),
             **self._class_metadata,
@@ -155,7 +173,9 @@ class TrainingHistoryDisplay(Display):
         time = 4
 
     history: Dict[str, List]
-    x_axis_mode: Union[Union[XAxisMode, str], Tuple[Union[XAxisMode, str]]] = XAxisMode.epoch
+    x_axis_mode: Union[
+        Union[XAxisMode, str], Tuple[Union[XAxisMode, str]]
+    ] = XAxisMode.epoch
     model_name: Optional[str] = None
     loss_name: Optional[str] = None
 
@@ -166,7 +186,9 @@ class TrainingHistoryDisplay(Display):
     ax_lr_: Axes = field(init=False)
 
     def _missing_signal_error_msg(self, key: str, keys=False) -> str:
-        msg = f"The history dict given to {self.__class__.__name__} does not have {key=}."
+        msg = (
+            f"The history dict given to {self.__class__.__name__} does not have {key=}."
+        )
         if keys:
             msg += f"\n{list(self.history.keys())=}"
         return msg
@@ -177,8 +199,7 @@ class TrainingHistoryDisplay(Display):
         mode = (mode,) if not isinstance(mode, tuple) else mode
         # noinspection PyTypeChecker
         self.x_axis_mode = tuple(
-            self.XAxisMode[mod] if isinstance(mod, str) else mod
-            for mod in mode
+            self.XAxisMode[mod] if isinstance(mod, str) else mod for mod in mode
         )
 
         x_axes = []
@@ -227,14 +248,20 @@ class TrainingHistoryDisplay(Display):
                 try:
                     epoch_size = np.array(self.history["train.epoch_size"])
                     batch_size = np.array(self.history["train.batch_size"])
-                    n_voxels = np.array([
-                        shape[0] * shape[1] * shape[2]
-                        for shape in self.history["train.crop_shape"]
-                    ])
+                    n_voxels = np.array(
+                        [
+                            shape[0] * shape[1] * shape[2]
+                            for shape in self.history["train.crop_shape"]
+                        ]
+                    )
                     x_axis = np.cumsum(epoch_size * batch_size * n_voxels)
 
                 except KeyError as ex:
-                    if ex.args[0] in ("train.epoch_size", "train.batch_size", "train.crop_shape"):
+                    if ex.args[0] in (
+                        "train.epoch_size",
+                        "train.batch_size",
+                        "train.crop_shape",
+                    ):
                         logger.error(self._missing_signal_error_msg(ex.args[0], True))
                     raise ex
 
@@ -251,7 +278,9 @@ class TrainingHistoryDisplay(Display):
             else:
                 raise NotImplementedError(f"{self.x_axis_mode=}")
 
-            assert len(x_axis) > 1, "You don't have enough epochs to plot. Go to the gym and call me later."
+            assert (
+                len(x_axis) > 1
+            ), "You don't have enough epochs to plot. Go to the gym and call me later."
 
             x_axes.append(x_axis)
 
@@ -260,7 +289,9 @@ class TrainingHistoryDisplay(Display):
     @property
     def title(self) -> str:
         x_axis = "-".join([mod.name for mod in self.x_axis_mode])
-        return (self.model_name or "unknown-model") + f".training-history-plot.{x_axis=}"
+        return (
+            self.model_name or "unknown-model"
+        ) + f".training-history-plot.{x_axis=}"
 
     def plot(
         self,
@@ -272,12 +303,16 @@ class TrainingHistoryDisplay(Display):
         lr_kwargs: dict = None,
         n_xticks: int = 11,
     ) -> "TrainingHistoryDisplay":
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         n_necessary_axes = len(metrics) + int(with_lr)
 
         assert isinstance(axs, ndarray), f"{type(axs)=}"
-        assert (axs_shape := axs.shape) == (ideal_shape := (n_necessary_axes,)), f"{ideal_shape=} {axs_shape=}"
+        assert (axs_shape := axs.shape) == (
+            ideal_shape := (n_necessary_axes,)
+        ), f"{ideal_shape=} {axs_shape=}"
 
         if with_lr:
             axs_metrics: List[Axes] = axs[:-1].tolist()
@@ -298,27 +333,33 @@ class TrainingHistoryDisplay(Display):
 
             try:
                 metric = self.history[metric_name]
-                metric_kwargs = {
-                    **dict(label="train"),
-                    **(metric_kwargs or dict())
-                }
+                metric_kwargs = {**dict(label="train"), **(metric_kwargs or dict())}
 
                 # noinspection PyArgumentList
-                self.plots_[metric_name] = ax.plot(self.x_axes_[0], metric, **metric_kwargs)
+                self.plots_[metric_name] = ax.plot(
+                    self.x_axes_[0], metric, **metric_kwargs
+                )
 
                 x_tickss = []
                 for x_axis_ in self.x_axes_:
-                    x_tickss.append(tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_)))
-                    
+                    x_tickss.append(
+                        tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_))
+                    )
+
                 ax.set_xticks(x_tickss[0])
                 x_tickss = [
                     [
-                        str(int(val)) if mod == self.XAxisMode.epoch else
-                        str(int(val)) if mod == self.XAxisMode.batch else
-                        str(int(val / 1000)) + "k" if mod == self.XAxisMode.crop else
-                        humanize.intword(int(float(f"{val:.2g}"))) if mod == self.XAxisMode.voxel else
-                        humanize.time.naturaldelta(val, minimum_unit="seconds") if mod == self.XAxisMode.time else
-                        "err"
+                        str(int(val))
+                        if mod == self.XAxisMode.epoch
+                        else str(int(val))
+                        if mod == self.XAxisMode.batch
+                        else str(int(val / 1000)) + "k"
+                        if mod == self.XAxisMode.crop
+                        else humanize.intword(int(float(f"{val:.2g}")))
+                        if mod == self.XAxisMode.voxel
+                        else humanize.time.naturaldelta(val, minimum_unit="seconds")
+                        if mod == self.XAxisMode.time
+                        else "err"
                         for val in ticks
                     ]
                     for ticks, mod in zip(x_tickss, self.x_axis_mode)
@@ -338,21 +379,29 @@ class TrainingHistoryDisplay(Display):
                 val_metric = self.history[val_metric_name]
                 val_metric_kwargs = {
                     **dict(label="val"),
-                    **(val_metric_kwargs or dict())
+                    **(val_metric_kwargs or dict()),
                 }
                 # noinspection PyArgumentList
-                self.plots_[val_metric_name] = ax.plot(self.x_axes_[0], val_metric, **val_metric_kwargs)
+                self.plots_[val_metric_name] = ax.plot(
+                    self.x_axes_[0], val_metric, **val_metric_kwargs
+                )
 
             except KeyError as ex:
                 if ex.args[0] != val_metric_name:
                     raise ex
-                logger.warning(f"{self._missing_signal_error_msg(val_metric_name, False)}")
+                logger.warning(
+                    f"{self._missing_signal_error_msg(val_metric_name, False)}"
+                )
 
             ax.set_title(
                 f"{metric_name} history "
                 f"{f'({self.loss_name})' if metric_name == 'loss' and self.loss_name is not None else ''}"
             )
-            ax.set_ylabel(self.loss_name if metric_name == 'loss' and self.loss_name is not None else metric_name)
+            ax.set_ylabel(
+                self.loss_name
+                if metric_name == "loss" and self.loss_name is not None
+                else metric_name
+            )
             ax.set_xlabel("/".join([mod.name for mod in self.x_axis_mode]))
 
             # losses tend to go down, so this should be a good position
@@ -360,8 +409,14 @@ class TrainingHistoryDisplay(Display):
             ax.legend(loc="upper right")
 
         try:
-            self.plots_["lr"] = ax_lr.plot(self.x_axes_[0], self.history["lr"], label="lr")
-            ax_lr.set_xticks(tick_locator.tick_values(vmin=min(self.x_axes_[0]), vmax=max(self.x_axes_[0])))
+            self.plots_["lr"] = ax_lr.plot(
+                self.x_axes_[0], self.history["lr"], label="lr"
+            )
+            ax_lr.set_xticks(
+                tick_locator.tick_values(
+                    vmin=min(self.x_axes_[0]), vmax=max(self.x_axes_[0])
+                )
+            )
             ax_lr.set_title("Learning rate history")
             ax_lr.set_ylabel(f"learning rate (lr)")
             ax_lr.set_xlabel("epoch")
@@ -374,7 +429,7 @@ class TrainingHistoryDisplay(Display):
 
         except KeyError as ex:
             if ex.args[0] == "lr":
-                logger.error(self._missing_signal_error_msg('lr', True))
+                logger.error(self._missing_signal_error_msg("lr", True))
             raise ex
 
         if self.model_name is not None:
@@ -383,34 +438,42 @@ class TrainingHistoryDisplay(Display):
         return self
 
 
-def mark_min_values(ax: Axes, plot: Line2D, fmt_x=".3g", fmt_y=".3g", with_txt=True, txt_kwargs: dict = None) -> Union[Line2D, Tuple[Line2D, Text]]:
+def mark_min_values(
+    ax: Axes,
+    plot: Line2D,
+    fmt_x=".3g",
+    fmt_y=".3g",
+    with_txt=True,
+    txt_kwargs: dict = None,
+) -> Union[Line2D, Tuple[Line2D, Text]]:
     xy = plot.get_xydata()
     argmin_y = int(np.argmin(xy[:, 1]))
     label = plot.get_label()
     x_argmin_y, min_y = xy[argmin_y, :]
 
-    logger.info(
-        f"{label}: argmin={x_argmin_y:{fmt_x}} --> min={min_y:{fmt_y}}"
-    )
+    logger.info(f"{label}: argmin={x_argmin_y:{fmt_x}} --> min={min_y:{fmt_y}}")
 
     ylim = ax.get_ylim()
     color = plot.get_color()
     vlines_plot = ax.vlines(
-        x_argmin_y, min_y, ylim[1] / 2,
-        linestyles='--',
+        x_argmin_y,
+        min_y,
+        ylim[1] / 2,
+        linestyles="--",
         label=f"min({label})",
         colors=color,
     )
 
     if with_txt:
         txt_kwargs = {
-            **dict(fontdict=dict(rotation=60, color=color), rotation_mode='anchor'),
+            **dict(fontdict=dict(rotation=60, color=color), rotation_mode="anchor"),
             **(txt_kwargs or {}),
         }
         txt = ax.text(
-            x_argmin_y, ylim[1] / 2,
+            x_argmin_y,
+            ylim[1] / 2,
             f"min({label})\n(x={x_argmin_y:{fmt_x}}, y={min_y:{fmt_y}})",
-            **txt_kwargs
+            **txt_kwargs,
         )
 
     ax.set_ylim(*ylim)
@@ -435,18 +498,35 @@ class OrthogonalSlicesDisplay(Display):
 
     def __post_init__(self):
         (width, height, depth) = self.volume.shape
-        self.x, self.y, self.z = self.x or int(width // 2), self.y or int(height // 2), self.z or int(depth // 2)
-        assert 0 <= self.x < self.volume.shape[0], f"{self.x=} out of range {self.volume.shape[0]=})"
-        assert 0 <= self.y < self.volume.shape[1], f"{self.y=} out of range {self.volume.shape[1]=})"
-        assert 0 <= self.z < self.volume.shape[2], f"{self.z=} out of range {self.volume.shape[2]=})"
+        self.x, self.y, self.z = (
+            self.x or int(width // 2),
+            self.y or int(height // 2),
+            self.z or int(depth // 2),
+        )
+        assert (
+            0 <= self.x < self.volume.shape[0]
+        ), f"{self.x=} out of range {self.volume.shape[0]=})"
+        assert (
+            0 <= self.y < self.volume.shape[1]
+        ), f"{self.y=} out of range {self.volume.shape[1]=})"
+        assert (
+            0 <= self.z < self.volume.shape[2]
+        ), f"{self.z=} out of range {self.volume.shape[2]=})"
 
     @property
     def title(self) -> str:
         return f"{self.volume_name}.orthogonal-slices-display.x={self.x}-y={self.y}-z={self.z}"
 
-    def plot(self, axs: ndarray = None, with_cuts=True, imshow_kwargs: dict = None,
-             cut_lines_kwargs: dict = None) -> "OrthogonalSlicesDisplay":
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+    def plot(
+        self,
+        axs: ndarray = None,
+        with_cuts=True,
+        imshow_kwargs: dict = None,
+        cut_lines_kwargs: dict = None,
+    ) -> "OrthogonalSlicesDisplay":
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         # noinspection PyShadowingNames
         import matplotlib.pyplot as plt
@@ -470,7 +550,7 @@ class OrthogonalSlicesDisplay(Display):
 
         imshow_kwargs_ = {
             **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=1),
-            **(imshow_kwargs or {})
+            **(imshow_kwargs or {}),
         }  # override with user-given kwargs
 
         slice_xy = self.volume[:, :, self.z].T
@@ -488,29 +568,29 @@ class OrthogonalSlicesDisplay(Display):
 
         xy_axis.set_xlabel("x")
         xy_axis.set_ylabel("y")
-        xy_axis.set_title(f"XY :: z={self.z}", fontdict=dict(color='g'))
+        xy_axis.set_title(f"XY :: z={self.z}", fontdict=dict(color="g"))
 
         yz_axis.set_xlabel("z")
         yz_axis.set_ylabel("y")
-        yz_axis.set_title(f"YZ :: x={self.x}", fontdict=dict(color='r'))
+        yz_axis.set_title(f"YZ :: x={self.x}", fontdict=dict(color="r"))
 
         xz_axis.set_xlabel("x")
         xz_axis.set_ylabel("z")
-        xz_axis.set_title(f"XZ :: y={self.y}", fontdict=dict(color='b'))
+        xz_axis.set_title(f"XZ :: y={self.y}", fontdict=dict(color="b"))
 
         if with_cuts:
             axes_list = [xy_axis, yz_axis, xz_axis]
             lims = [(axis.get_xlim(), axis.get_ylim()) for axis in axes_list]
             cut_lines_kwargs = {
                 **dict(linestyles="--", linewidth=4),
-                **(cut_lines_kwargs or {})
+                **(cut_lines_kwargs or {}),
             }
-            xy_axis.vlines(self.x, 0, slice_xy.shape[0], color='r', **cut_lines_kwargs)
-            xy_axis.hlines(self.y, 0, slice_xy.shape[1], color='b', **cut_lines_kwargs)
-            yz_axis.vlines(self.z, 0, slice_yz.shape[0], color='g', **cut_lines_kwargs)
-            yz_axis.hlines(self.y, 0, slice_yz.shape[1], color='b', **cut_lines_kwargs)
-            xz_axis.vlines(self.x, 0, slice_xz.shape[0], color='r', **cut_lines_kwargs)
-            xz_axis.hlines(self.z, 0, slice_xz.shape[1], color='g', **cut_lines_kwargs)
+            xy_axis.vlines(self.x, 0, slice_xy.shape[0], color="r", **cut_lines_kwargs)
+            xy_axis.hlines(self.y, 0, slice_xy.shape[1], color="b", **cut_lines_kwargs)
+            yz_axis.vlines(self.z, 0, slice_yz.shape[0], color="g", **cut_lines_kwargs)
+            yz_axis.hlines(self.y, 0, slice_yz.shape[1], color="b", **cut_lines_kwargs)
+            xz_axis.vlines(self.x, 0, slice_xz.shape[0], color="r", **cut_lines_kwargs)
+            xz_axis.hlines(self.z, 0, slice_xz.shape[1], color="g", **cut_lines_kwargs)
             plt.setp(xy_axis.spines.values(), color="g", **spines_specs_dict)
             plt.setp(yz_axis.spines.values(), color="r", **spines_specs_dict)
             plt.setp(xz_axis.spines.values(), color="b", **spines_specs_dict)
@@ -540,9 +620,16 @@ class SliceDataPredictionDisplay(Display):
     def title(self) -> str:
         return f"{self.slice_name}.data-prediction"
 
-    def plot(self, axs: ndarray, data_imshow_kwargs: dict = None, pred_imshow_kwargs: dict = None) -> "SliceDataPredictionDisplay":
+    def plot(
+        self,
+        axs: ndarray,
+        data_imshow_kwargs: dict = None,
+        pred_imshow_kwargs: dict = None,
+    ) -> "SliceDataPredictionDisplay":
 
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         # noinspection PyShadowingNames
         import matplotlib.pyplot as plt
@@ -565,21 +652,33 @@ class SliceDataPredictionDisplay(Display):
 
         data_imshow_kwargs = {
             **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=1),
-            **(data_imshow_kwargs or {})
+            **(data_imshow_kwargs or {}),
         }  # override with user-given kwargs
 
         data_axis.imshow(self.slice_data, **data_imshow_kwargs)
         data_axis.set_title("data")
 
         pred_imshow_kwargs = {
-            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=(1 if self.is_probability else self.n_classes - 1)),
-            **(pred_imshow_kwargs or {})
+            **dict(
+                cmap=cm.gray,
+                interpolation=None,
+                vmin=0,
+                vmax=(1 if self.is_probability else self.n_classes - 1),
+            ),
+            **(pred_imshow_kwargs or {}),
         }  # override with user-given kwargs
 
         pred_axis.imshow(self.slice_prediction, **pred_imshow_kwargs)
-        pred_axis.set_title("probability" + (f" class={self.class_name}" if self.class_name is not None else "") if self.is_probability else "prediction")
+        pred_axis.set_title(
+            "probability"
+            + (f" class={self.class_name}" if self.class_name is not None else "")
+            if self.is_probability
+            else "prediction"
+        )
 
-        fig.suptitle(f"Data/{'probability' if self.is_probability else 'prediction'} comparison on slice={self.slice_name}")
+        fig.suptitle(
+            f"Data/{'probability' if self.is_probability else 'prediction'} comparison on slice={self.slice_name}"
+        )
 
         return self
 
@@ -600,21 +699,41 @@ class OrthogonalSlicesPredictionDisplay(Display):
     xz_axes_: Axes = field(init=False)
 
     def __post_init__(self):
-        assert self.volume_data.shape == self.volume_prediction.shape, f"{self.volume_data.shape=} {self.volume_prediction.shape=}"
+        assert (
+            self.volume_data.shape == self.volume_prediction.shape
+        ), f"{self.volume_data.shape=} {self.volume_prediction.shape=}"
         (width, height, depth) = self.volume_data.shape
-        self.x, self.y, self.z = self.x or int(width // 2), self.y or int(height // 2), self.z or int(depth // 2)
-        assert 0 <= self.x < self.volume_data.shape[0], f"{self.x=} out of range {self.volume_data.shape[0]=})"
-        assert 0 <= self.y < self.volume_data.shape[1], f"{self.y=} out of range {self.volume_data.shape[1]=})"
-        assert 0 <= self.z < self.volume_data.shape[2], f"{self.z=} out of range {self.volume_data.shape[2]=})"
+        self.x, self.y, self.z = (
+            self.x or int(width // 2),
+            self.y or int(height // 2),
+            self.z or int(depth // 2),
+        )
+        assert (
+            0 <= self.x < self.volume_data.shape[0]
+        ), f"{self.x=} out of range {self.volume_data.shape[0]=})"
+        assert (
+            0 <= self.y < self.volume_data.shape[1]
+        ), f"{self.y=} out of range {self.volume_data.shape[1]=})"
+        assert (
+            0 <= self.z < self.volume_data.shape[2]
+        ), f"{self.z=} out of range {self.volume_data.shape[2]=})"
 
     @property
     def title(self) -> str:
         return f"{self.volume_name}.orthogonal-slices-display.x={self.x}-y={self.y}-z={self.z}"
 
-    def plot(self, axs: ndarray = None, with_cuts=True, data_imshow_kwargs: dict = None, pred_imshow_kwargs: dict = None,
-             cut_lines_kwargs: dict = None) -> "OrthogonalSlicesDisplay":
-        
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+    def plot(
+        self,
+        axs: ndarray = None,
+        with_cuts=True,
+        data_imshow_kwargs: dict = None,
+        pred_imshow_kwargs: dict = None,
+        cut_lines_kwargs: dict = None,
+    ) -> "OrthogonalSlicesDisplay":
+
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         # noinspection PyShadowingNames
         import matplotlib.pyplot as plt
@@ -637,7 +756,7 @@ class OrthogonalSlicesPredictionDisplay(Display):
 
         data_imshow_kwargs_ = {
             **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=1),
-            **(data_imshow_kwargs or {})
+            **(data_imshow_kwargs or {}),
         }  # override with user-given kwargs
 
         slice_xy = self.volume_data[:, :, self.z].T
@@ -645,15 +764,26 @@ class OrthogonalSlicesPredictionDisplay(Display):
         slice_xz = self.volume_data[:, self.y, :].T
 
         # noinspection PyArgumentList
-        self.plots_["xy_slice_data"] = xy_axes[0].imshow(slice_xy, **data_imshow_kwargs_)
+        self.plots_["xy_slice_data"] = xy_axes[0].imshow(
+            slice_xy, **data_imshow_kwargs_
+        )
         # noinspection PyArgumentList
-        self.plots_["yz_slice_data"] = yz_axes[0].imshow(slice_yz, **data_imshow_kwargs_)
+        self.plots_["yz_slice_data"] = yz_axes[0].imshow(
+            slice_yz, **data_imshow_kwargs_
+        )
         # noinspection PyArgumentList
-        self.plots_["xz_slice_data"] = xz_axes[0].imshow(slice_xz, **data_imshow_kwargs_)
+        self.plots_["xz_slice_data"] = xz_axes[0].imshow(
+            slice_xz, **data_imshow_kwargs_
+        )
 
         pred_imshow_kwargs = {
-            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=(1 if self.is_probability else self.n_classes - 1)),
-            **(pred_imshow_kwargs or {})
+            **dict(
+                cmap=cm.gray,
+                interpolation=None,
+                vmin=0,
+                vmax=(1 if self.is_probability else self.n_classes - 1),
+            ),
+            **(pred_imshow_kwargs or {}),
         }  # override with user-given kwargs
 
         slice_xy_pred = self.volume_prediction[:, :, self.z].T
@@ -661,39 +791,57 @@ class OrthogonalSlicesPredictionDisplay(Display):
         slice_xz_pred = self.volume_prediction[:, self.y, :].T
 
         # noinspection PyArgumentList
-        self.plots_["xy_slice_pred"] = xy_axes[1].imshow(slice_xy_pred, **pred_imshow_kwargs)
+        self.plots_["xy_slice_pred"] = xy_axes[1].imshow(
+            slice_xy_pred, **pred_imshow_kwargs
+        )
         # noinspection PyArgumentList
-        self.plots_["yz_slice_pred"] = yz_axes[1].imshow(slice_yz_pred, **pred_imshow_kwargs)
+        self.plots_["yz_slice_pred"] = yz_axes[1].imshow(
+            slice_yz_pred, **pred_imshow_kwargs
+        )
         # noinspection PyArgumentList
-        self.plots_["xz_slice_pred"] = xz_axes[1].imshow(slice_xz_pred, **pred_imshow_kwargs)
+        self.plots_["xz_slice_pred"] = xz_axes[1].imshow(
+            slice_xz_pred, **pred_imshow_kwargs
+        )
 
         spines_specs_dict = dict(linewidth=4)
 
         xy_axes[0].set_xlabel("x")
         xy_axes[0].set_ylabel("y")
-        xy_axes[0].set_title(f"XY :: z={self.z}", fontdict=dict(color='g'))
+        xy_axes[0].set_title(f"XY :: z={self.z}", fontdict=dict(color="g"))
 
         yz_axes[0].set_xlabel("z")
         yz_axes[0].set_ylabel("y")
-        yz_axes[0].set_title(f"YZ :: x={self.x}", fontdict=dict(color='r'))
+        yz_axes[0].set_title(f"YZ :: x={self.x}", fontdict=dict(color="r"))
 
         xz_axes[0].set_xlabel("x")
         xz_axes[0].set_ylabel("z")
-        xz_axes[0].set_title(f"XZ :: y={self.y}", fontdict=dict(color='b'))
+        xz_axes[0].set_title(f"XZ :: y={self.y}", fontdict=dict(color="b"))
 
         if with_cuts:
             axes_list = [xy_axes[0], yz_axes[0], xz_axes[0]]
             lims = [(axis.get_xlim(), axis.get_ylim()) for axis in axes_list]
             cut_lines_kwargs = {
                 **dict(linestyles="--", linewidth=4),
-                **(cut_lines_kwargs or {})
+                **(cut_lines_kwargs or {}),
             }
-            xy_axes[0].vlines(self.x, 0, slice_xy.shape[0], color='r', **cut_lines_kwargs)
-            xy_axes[0].hlines(self.y, 0, slice_xy.shape[1], color='b', **cut_lines_kwargs)
-            yz_axes[0].vlines(self.z, 0, slice_yz.shape[0], color='g', **cut_lines_kwargs)
-            yz_axes[0].hlines(self.y, 0, slice_yz.shape[1], color='b', **cut_lines_kwargs)
-            xz_axes[0].vlines(self.x, 0, slice_xz.shape[0], color='r', **cut_lines_kwargs)
-            xz_axes[0].hlines(self.z, 0, slice_xz.shape[1], color='g', **cut_lines_kwargs)
+            xy_axes[0].vlines(
+                self.x, 0, slice_xy.shape[0], color="r", **cut_lines_kwargs
+            )
+            xy_axes[0].hlines(
+                self.y, 0, slice_xy.shape[1], color="b", **cut_lines_kwargs
+            )
+            yz_axes[0].vlines(
+                self.z, 0, slice_yz.shape[0], color="g", **cut_lines_kwargs
+            )
+            yz_axes[0].hlines(
+                self.y, 0, slice_yz.shape[1], color="b", **cut_lines_kwargs
+            )
+            xz_axes[0].vlines(
+                self.x, 0, slice_xz.shape[0], color="r", **cut_lines_kwargs
+            )
+            xz_axes[0].hlines(
+                self.z, 0, slice_xz.shape[1], color="g", **cut_lines_kwargs
+            )
             plt.setp(xy_axes[0].spines.values(), color="g", **spines_specs_dict)
             plt.setp(yz_axes[0].spines.values(), color="r", **spines_specs_dict)
             plt.setp(xz_axes[0].spines.values(), color="b", **spines_specs_dict)
@@ -725,14 +873,12 @@ class ClassImbalanceDisplay(Display):
         return f"{self.volume_name}.class-imbalance"
 
     def plot(
-        self, 
-        count_fmt_func, 
-        perc_fmt_func,
-        ax=None, 
-        barh_kwargs=dict(),
+        self, count_fmt_func, perc_fmt_func, ax=None, barh_kwargs=dict(),
     ) -> "Display":
 
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         # noinspection PyShadowingNames
         import matplotlib.pyplot as plt
@@ -747,23 +893,21 @@ class ClassImbalanceDisplay(Display):
         self.fig_ = fig
 
         self.plots_["barh"] = ax.barh(
-            self.labels_idx, 
-            self.labels_counts,
-            **barh_kwargs,
+            self.labels_idx, self.labels_counts, **barh_kwargs,
         )
         ax.set_yticks([])
         ax.set_xticks([])
-        
+
         for idx, count in zip(self.labels_idx, self.labels_counts):
-            
+
             self.plots_[f"text.label_idx={idx}"] = ax.text(
-                max(self.labels_counts) // 4, 
+                max(self.labels_counts) // 4,
                 idx,
                 (
                     f"{self.labels_names[idx]} ({idx=})\n"
                     f"{count_fmt_func(count)} ({perc_fmt_func(count / self.n_voxels)})"
                 ),
-                fontsize="medium"
+                fontsize="medium",
             )
 
         ax.set_title(f"Class imbalance of {self.volume_name}")
@@ -798,48 +942,58 @@ class VoxelValueHistogramDisplay(Display):
     def title(self) -> str:
         return f"{self.volume_name}.voxel-value-histogram"
 
-    def plot(self, ax: Axes, y_linear_kwargs: dict = None, y_log_kwargs: dict = None) -> "VoxelValueHistogram":
-        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+    def plot(
+        self, ax: Axes, y_linear_kwargs: dict = None, y_log_kwargs: dict = None
+    ) -> "VoxelValueHistogram":
+        check_matplotlib_support(
+            this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot"
+        )
 
         self.axs_ = ax
         self.fig_ = ax.figure
         self.ax_log_ = axlog = ax.twinx()
 
         y_linear_kwargs = {
-            **dict(linewidth=.75, color='blue', label='linear',),
+            **dict(linewidth=0.75, color="blue", label="linear",),
             **(y_linear_kwargs or {}),
         }
         # noinspection PyArgumentList
         self.plots_["y_linear"] = ax.step(self.bins, self.values, **y_linear_kwargs)
         ax.set_xlim(-1, self.bins[-1])
-        ax.set_xticks(list(map(int, np.linspace(0, self.bins[-3], 256 // 16 + 1))))  # multiples of 8
+        ax.set_xticks(
+            list(map(int, np.linspace(0, self.bins[-3], 256 // 16 + 1)))
+        )  # multiples of 8
         ax.set_xlabel(f"Voxel gray value [0, {self.bins[-3]}]")
 
         ax.set_ylim((0, 1.05 * max(self.values)))
-        ax.set_ylabel("Proportion of voxels", color=y_linear_kwargs["color"], fontsize='large')
+        ax.set_ylabel(
+            "Proportion of voxels", color=y_linear_kwargs["color"], fontsize="large"
+        )
         ax.set_yticks([])
 
         y_log_kwargs = {
-            **dict(linewidth=.75, color='red', label='log',),
+            **dict(linewidth=0.75, color="red", label="log",),
             **(y_log_kwargs or {}),
         }
         # noinspection PyArgumentList
         self.plots_["y_log"] = axlog.step(self.bins, self.values, **y_log_kwargs)
         axlog.set_yscale("log")
-        axlog.grid(axis='y', which='major', ls='--', color=y_log_kwargs["color"], alpha=.5)
+        axlog.grid(
+            axis="y", which="major", ls="--", color=y_log_kwargs["color"], alpha=0.5
+        )
 
         log_tick_locator = plt.FixedLocator(np.logspace(-6, 0, 7))
         axlog.yaxis.set_major_locator(log_tick_locator)
         axlog.set_yticklabels(
             [f"{int(np.log10(t)):d}" for t in axlog.get_yticks()],
-            c=y_log_kwargs["color"]
+            c=y_log_kwargs["color"],
         )
         axlog.set_ylim(1e-6, 1)
 
         axlog.set_ylabel(
             "Proportion of voxels (log10 scale)",
             color=y_log_kwargs["color"],
-            fontsize='large',
+            fontsize="large",
             rotation=-90,
             rotation_mode="anchor",
             labelpad=20,
@@ -869,14 +1023,17 @@ class VoxelValueHistogramPerClassDisplay(Display):
         assert min(self.bins) == 0, f"{min(self.bins)=}"
 
         for idx in self.labels_idx:
-            assert (values_len := len(self.values_per_label[idx])) == 256, f"{values_len=} {idx=}"
-            assert (values_len := len(self.values_per_label_global_proportion[idx])) == 256, f"{values_len=} {idx=}"
+            assert (
+                values_len := len(self.values_per_label[idx])
+            ) == 256, f"{values_len=} {idx=}"
+            assert (
+                values_len := len(self.values_per_label_global_proportion[idx])
+            ) == 256, f"{values_len=} {idx=}"
 
         # i want to get the vertical borders to show up
         self.bins = copy.copy(self.bins) + [self.bins[-1] + 1, self.bins[-1] + 2]
         self.values_per_label = [
-            [0] + copy.copy(self.values_per_label[idx]) + [0]
-            for idx in self.labels_idx
+            [0] + copy.copy(self.values_per_label[idx]) + [0] for idx in self.labels_idx
         ]
         self.values_per_label_global_proportion = [
             [0] + copy.copy(self.values_per_label_global_proportion[idx]) + [0]
@@ -898,12 +1055,14 @@ class VoxelValueHistogramPerClassDisplay(Display):
         assert isinstance(ax_global, Axes), f"{ax_global=}"
 
         for label_idx, label_hist, label_hist_global in zip(
-            self.labels_idx, self.values_per_label, self.values_per_label_global_proportion
+            self.labels_idx,
+            self.values_per_label,
+            self.values_per_label_global_proportion,
         ):
             self.plots_[f"per_label.{label_idx=}"] = ax_per_label.step(
                 self.bins,
                 label_hist,
-                linewidth=.75,
+                linewidth=0.75,
                 label=self.line_labels[label_idx],
             )
 
@@ -919,7 +1078,7 @@ class VoxelValueHistogramPerClassDisplay(Display):
             self.plots_[f"global.{label_idx=}"] = ax_global.step(
                 self.bins,
                 label_hist_global,
-                linewidth=.75,
+                linewidth=0.75,
                 label=self.line_labels[label_idx],
             )
             ax_global.set_xlim(*xlim)
@@ -927,15 +1086,21 @@ class VoxelValueHistogramPerClassDisplay(Display):
             ax_global.set_xlabel(xlabel)
 
         ax_per_label.set_ybound(lower=0)
-        ax_per_label.set_ylabel("Proportion of voxels *per class*", fontsize='large')
+        ax_per_label.set_ylabel("Proportion of voxels *per class*", fontsize="large")
         ax_per_label.legend()
-        ax_per_label.set_title("Per class proportion\neach histogram is the proportion out of those of the same label")
+        ax_per_label.set_title(
+            "Per class proportion\neach histogram is the proportion out of those of the same label"
+        )
 
-        ax_global.set_yscale('log')
-        ax_global.set_ylabel("Proportion of voxels *overall* (global) [log]", fontsize='large')
+        ax_global.set_yscale("log")
+        ax_global.set_ylabel(
+            "Proportion of voxels *overall* (global) [log]", fontsize="large"
+        )
         ax_global.legend()
-        ax_global.set_title("Global proportion\neach histogram is the proportion out of all voxels")
-        ax_global.grid(axis='y', which='major', ls='--', alpha=.5)
+        ax_global.set_title(
+            "Global proportion\neach histogram is the proportion out of all voxels"
+        )
+        ax_global.grid(axis="y", which="major", ls="--", alpha=0.5)
         ax_global.set_ybound(lower=1e-6, upper=1)
 
         fig.suptitle(f"Volume data histogram per class\nvolume={self.volume_name}")
@@ -957,14 +1122,17 @@ class ClassProbabilityHistogramDisplay(Display):
         assert max(self.bins) == 1, f"{max(self.bins)}"
 
         for idx in self.labels_idx:
-            assert (values_len := len(self.values_per_class[idx])) == 100, f"{values_len=} {idx=}"
-            assert np.isclose((sum_values := np.sum(self.values_per_class[idx])), 1, atol=.001), f"{sum_values=} {idx=}"
+            assert (
+                values_len := len(self.values_per_class[idx])
+            ) == 100, f"{values_len=} {idx=}"
+            assert np.isclose(
+                (sum_values := np.sum(self.values_per_class[idx])), 1, atol=0.001
+            ), f"{sum_values=} {idx=}"
 
         # i want to get the vertical borders to show up
         self.bins = copy.copy(self.bins) + [1.001]
         self.values_per_class = [
-            [0] + copy.copy(values_list) + [0]
-            for values_list in self.values_per_class
+            [0] + copy.copy(values_list) + [0] for values_list in self.values_per_class
         ]
 
     @property
@@ -976,31 +1144,43 @@ class ClassProbabilityHistogramDisplay(Display):
         self.axs_ = ax
         self.fig_ = ax.figure
 
-        for idx, name, values in zip(self.labels_idx, self.labels_names, self.values_per_class):
+        for idx, name, values in zip(
+            self.labels_idx, self.labels_names, self.values_per_class
+        ):
             self.plots_[f"proba_hist_{idx}"] = ax.step(
                 self.bins,
                 values,
                 label=f"probability('{name}' (idx={idx}))",
-                linewidth=1.5
+                linewidth=1.5,
             )
 
-        xlims = (-.025, 1.025)
+        xlims = (-0.025, 1.025)
         ylims_10pow = (-5, 0)
         ylims = tuple(10 ** p for p in ylims_10pow)
 
-        ax.set_yscale('log')
+        ax.set_yscale("log")
         ax.set_ylim(ylims[0], 1.5 * ylims[1])
-        ax.set_yticks(np.logspace(ylims_10pow[0], ylims_10pow[1], ylims_10pow[1] - ylims_10pow[0] + 1))
+        ax.set_yticks(
+            np.logspace(
+                ylims_10pow[0], ylims_10pow[1], ylims_10pow[1] - ylims_10pow[0] + 1
+            )
+        )
         ax.set_ylabel(
-            f"Proportion of pixels in *log scale* \n"
-            f"log10(#voxels in bin / #voxels)"
+            f"Proportion of pixels in *log scale* \n" f"log10(#voxels in bin / #voxels)"
         )
         ax.set_xlim(*xlims)
         ax.set_xticks(np.linspace(0, 1, 11))
         ax.set_xlabel("Probability\nbins of 0.01 = 1% width")
 
-        ax.tick_params(axis='y', left=True, right=True, labelleft=True, labelright=True, which="both")
-        ax.grid(True, axis='y', which='major', ls='--')
+        ax.tick_params(
+            axis="y",
+            left=True,
+            right=True,
+            labelleft=True,
+            labelright=True,
+            which="both",
+        )
+        ax.grid(True, axis="y", which="major", ls="--")
 
         ax.set_title("Voxel probability histograms")
         ax.legend(loc="upper center", fontsize="x-small", framealpha=1)
@@ -1041,14 +1221,15 @@ class ConfusionMatrixDisplay:
     figure_ : matplotlib Figure
         Figure containing the confusion matrix.
     """
+
     def __init__(self, confusion_matrix, *, display_labels=None):
         self.confusion_matrix = confusion_matrix
         self.display_labels = display_labels
 
     def plot(
         self,
-        cmap='viridis',
-        xticks_rotation='horizontal',
+        cmap="viridis",
+        xticks_rotation="horizontal",
         values_format=None,
         ax=None,
         cmap_vmin=0,
@@ -1089,11 +1270,7 @@ class ConfusionMatrixDisplay:
         cm = self.confusion_matrix
         n_classes = cm.shape[0]
         self.im_ = ax.imshow(
-            cm,
-            interpolation='nearest',
-            cmap=cmap,
-            vmin=cmap_vmin,
-            vmax=cmap_vmax,
+            cm, interpolation="nearest", cmap=cmap, vmin=cmap_vmin, vmax=cmap_vmax,
         )
         self.text_ = None
         cmap_min, cmap_max = self.im_.cmap(0), self.im_.cmap(256)
@@ -1107,18 +1284,17 @@ class ConfusionMatrixDisplay:
             color = cmap_max if cm[i, j] < thresh else cmap_min
 
             if values_format is None:
-                text_cm = format(cm[i, j], '.2g')
-                if cm.dtype.kind != 'f':
-                    text_d = format(cm[i, j], 'd')
+                text_cm = format(cm[i, j], ".2g")
+                if cm.dtype.kind != "f":
+                    text_d = format(cm[i, j], "d")
                     if len(text_d) < len(text_cm):
                         text_cm = text_d
             else:
                 text_cm = format(cm[i, j], values_format)
 
             self.text_[i, j] = ax.text(
-                j, i, text_cm,
-                ha="center", va="center",
-                color=color)
+                j, i, text_cm, ha="center", va="center", color=color
+            )
 
         if self.display_labels is None:
             display_labels = np.arange(n_classes)
@@ -1126,12 +1302,14 @@ class ConfusionMatrixDisplay:
             display_labels = self.display_labels
 
         fig.colorbar(self.im_, ax=ax)
-        ax.set(xticks=np.arange(n_classes),
-               yticks=np.arange(n_classes),
-               xticklabels=display_labels,
-               yticklabels=display_labels,
-               ylabel="True label",
-               xlabel="Predicted label")
+        ax.set(
+            xticks=np.arange(n_classes),
+            yticks=np.arange(n_classes),
+            xticklabels=display_labels,
+            yticklabels=display_labels,
+            ylabel="True label",
+            xlabel="Predicted label",
+        )
 
         ax.set_ylim((n_classes - 0.5, -0.5))
         plt.setp(ax.get_xticklabels(), rotation=xticks_rotation)

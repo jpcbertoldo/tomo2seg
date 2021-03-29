@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from tensorflow.keras import backend as K
 from tensorflow.python.keras.metrics import Metric
 
@@ -11,7 +12,8 @@ def jaccard2_flat(y_true, y_pred, smooth=SMOOTH):
 
     # 3d or 2d cases
     assert (y_true_ndim == 4 and y_pred_ndim == 5) or (
-                y_true_ndim == 3 and y_pred_ndim == 4), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
+        y_true_ndim == 3 and y_pred_ndim == 4
+    ), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
 
     # one hot encoding
     n_classes = y_pred.shape[-1]
@@ -22,7 +24,7 @@ def jaccard2_flat(y_true, y_pred, smooth=SMOOTH):
     # y_true is ohe, so y_true ** 2 is the same thing
     union = K.sum(y_true, axis=axis) + K.sum(y_pred ** 2, axis=axis) - intersection
     jaccards = (intersection + smooth) / (union + smooth)
-    return 1. - K.mean(jaccards)
+    return 1.0 - K.mean(jaccards)
 
 
 def jaccard2_macro_avg(y_true, y_pred, smooth=SMOOTH):
@@ -31,7 +33,8 @@ def jaccard2_macro_avg(y_true, y_pred, smooth=SMOOTH):
 
     # 3d or 2d cases
     assert (y_true_ndim == 4 and y_pred_ndim == 5) or (
-                y_true_ndim == 3 and y_pred_ndim == 4), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
+        y_true_ndim == 3 and y_pred_ndim == 4
+    ), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
 
     # one hot encoding
     n_classes = y_pred.shape[-1]
@@ -42,7 +45,7 @@ def jaccard2_macro_avg(y_true, y_pred, smooth=SMOOTH):
     # y_true is ohe, so y_true ** 2 is the same thing
     union = K.sum(y_true, axis=axis) + K.sum(y_pred ** 2, axis=axis) - intersection
     jaccards = (intersection + smooth) / (union + smooth)
-    return 1. - K.mean(jaccards)
+    return 1.0 - K.mean(jaccards)
 
 
 @dataclass(unsafe_hash=True)
@@ -59,7 +62,8 @@ class Jaccard2:
 
         # 3d or 2d cases
         assert (y_true_ndim == 4 and y_pred_ndim == 5) or (
-                    y_true_ndim == 3 and y_pred_ndim == 4), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
+            y_true_ndim == 3 and y_pred_ndim == 4
+        ), f"{y_true_ndim=} {y_pred_ndim=}"  # batch_idx, x, y, z (, class)
 
         y_true = K.cast(y_true == self.class_idx, y_pred.dtype)
         if y_pred_ndim == 4:
@@ -70,4 +74,4 @@ class Jaccard2:
         intersection = K.sum(y_true * y_pred)
         # y_true is ohe, so y_true ** 2 is the same thing
         union = K.sum(y_true) + K.sum(y_pred ** 2) - intersection
-        return 1. - ((intersection + smooth) / (union + smooth))
+        return 1.0 - ((intersection + smooth) / (union + smooth))

@@ -1,8 +1,8 @@
 import logging
-from logging import Formatter, StreamHandler, Logger
-from pprint import PrettyPrinter
 import sys
+from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
+from pprint import PrettyPrinter
 
 
 def get_formatter():

@@ -58,7 +58,7 @@ dtype = "uint8"  # todo remove the cast inside the generator?
 [metadata]
 mirrored_strategy = tf.distribute.MirroredStrategy()  # todo add strategy to metadata
 batch per replica
-str(model_paths.autosaved_model_path) + ".hdf5",  # todo move this to inside ModelPaths 
+str(model_paths.autosaved_model_path) + ".hdf5",  # todo move this to inside ModelPaths
 LR schedule + to the history
 
 [analysis]
@@ -103,13 +103,13 @@ also save crop predictions so that i can compare models that might have differen
 
 validation_steps=100,  # todo put in summary
 
-# todo add metrics 
+# todo add metrics
 # todo add wandb?
 # todo add analysis in the end, see examples of classif
 # todo add callbacks that generate classif examples
 # todo print line that I can cccv on the experiments spreadsheet
 # todo save the yaml file
-# todo (later): separate the analysis part in a separate script so it 
+# todo (later): separate the analysis part in a separate script so it
 #  can be called at any time with another model
 # todo experiment with CentralStorageStrategy?
 
@@ -117,14 +117,14 @@ todo notify me if the training breaks or finishes
     epochs=30,  # todo put this in variable
     callbacks=cb,  # todo mention in summary...
         use_multiprocessing=False,   # todo add to summary
-        
+
 
     data_hists_per_label_global_prop.append(
         # todo correct this to use shape
         label_data_hist_t.numpy() / 500**3
     )
-    
-todo do something to materialize or document the bins used in the histograms    
+
+todo do something to materialize or document the bins used in the histograms
 
 todo compute using keras background so i can put this in the model
 todo make option to save crop predictions so i can compare models without the aggregation method
@@ -140,7 +140,7 @@ go back to the fracture volume (jordan’s)
 implement weighted loss to force learning the fracture
 retrain composite 3d
 change the loss function [github] bermanmaxim/LovaszSoftmax
-crack with pre-training	
+crack with pre-training
 modify my training nb to script and hyper optimize (see keras-tuner):
 generalize more things in the modular structure
 batchnorm: add option for layernorm

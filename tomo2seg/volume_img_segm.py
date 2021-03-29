@@ -2,24 +2,26 @@
 Keras image generator from disk, with the accompanying segmentations.
 """
 
+import functools
+
 # Standard packages
 from collections import namedtuple
 from enum import Enum
-import functools
 from os.path import join
-from typing import List, Optional, Tuple, Dict, Any, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # Installed packages
 import numpy as np
+from imageio import imread
 from numpy import ndarray
 from numpy.random import RandomState
-from imageio import imread
 from tensorflow.keras.utils import Sequence
 
 
 # GT = Geometric Transformation
 class GT(Enum):
     """"""
+
     identity = 0
     rotation90 = 1
     flip_horizontal = 2
@@ -39,11 +41,19 @@ GEOM_TRANSF: Dict[GT, Callable[[ndarray], ndarray]] = {
     GT.transpose: functools.partial(np.transpose, axes=(0, 1)),
 }
 # todo verify compositions
-GEOM_TRANSF.update({
-    GT.transpose__flip_horizontal: lambda x: GEOM_TRANSF[GT.flip_horizontal](GEOM_TRANSF[GT.transpose](x)),
-    GT.flip_horizontal__flip_vertical: lambda x: GEOM_TRANSF[GT.flip_vertical](GEOM_TRANSF[GT.flip_horizontal](x)),
-    GT.flip_vertical__rotation90: lambda x: GEOM_TRANSF[GT.rotation90](GEOM_TRANSF[GT.flip_vertical](x))
-})
+GEOM_TRANSF.update(
+    {
+        GT.transpose__flip_horizontal: lambda x: GEOM_TRANSF[GT.flip_horizontal](
+            GEOM_TRANSF[GT.transpose](x)
+        ),
+        GT.flip_horizontal__flip_vertical: lambda x: GEOM_TRANSF[GT.flip_vertical](
+            GEOM_TRANSF[GT.flip_horizontal](x)
+        ),
+        GT.flip_vertical__rotation90: lambda x: GEOM_TRANSF[GT.rotation90](
+            GEOM_TRANSF[GT.flip_vertical](x)
+        ),
+    }
+)
 GEOM_TRANSF = {geo_transf.value: func for geo_transf, func in GEOM_TRANSF.items()}
 
 
@@ -56,19 +66,23 @@ class _Corner(Enum):
       |             |
      (BL)---------(BR)
     """
+
     BL = 0
     BR = 1
     UL = 2
     UR = 3
 
 
-_SliceParams = namedtuple("_SliceParams", [
-    "axis",  # the axis orthogonal to the  slice plane (0: x, 1: y, 2: z),
-    "coordinate",  # the offset of the slice on the axis
-    # ex: if axis = 2 then the slice is on the plane XY
-    "corner",
-    "geometric_transformation",
-])
+_SliceParams = namedtuple(
+    "_SliceParams",
+    [
+        "axis",  # the axis orthogonal to the  slice plane (0: x, 1: y, 2: z),
+        "coordinate",  # the offset of the slice on the axis
+        # ex: if axis = 2 then the slice is on the plane XY
+        "corner",
+        "geometric_transformation",
+    ],
+)
 
 
 def _get_random_transformations(n: int, random_state: RandomState) -> List[GT]:
@@ -97,11 +111,11 @@ def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
 
 
 def _generate_one_slice(
-        source_volume: ndarray,
-        label_volume: ndarray,
-        crop_size: int,
-        labels: List[int],
-        slice_param: _SliceParams,
+    source_volume: ndarray,
+    label_volume: ndarray,
+    crop_size: int,
+    labels: List[int],
+    slice_param: _SliceParams,
 ) -> (np.ndarray, np.ndarray):
     # todo return pixel-wise weights as well
 
@@ -119,18 +133,20 @@ def _generate_one_slice(
         labels_im = label_volume[:, :, slice_param.coordinate]
 
     else:
-        raise ValueError(f"slice_param.axis={slice_param.axis} unknown value. It must be in {{0, 1, 2}}.")
+        raise ValueError(
+            f"slice_param.axis={slice_param.axis} unknown value. It must be in {{0, 1, 2}}."
+        )
 
     # 2: crop it from the right corner
     x_start, x_end = (
         (0, crop_size)
-        if slice_param.corner in (_Corner.BL, _Corner.UL) else
-        (- crop_size, data_im.shape[0])
+        if slice_param.corner in (_Corner.BL, _Corner.UL)
+        else (-crop_size, data_im.shape[0])
     )
     y_start, y_end = (
         (0, crop_size)
-        if slice_param.corner in (_Corner.UL, _Corner.UR) else
-        (-crop_size, data_im.shape[1])
+        if slice_param.corner in (_Corner.UL, _Corner.UR)
+        else (-crop_size, data_im.shape[1])
     )
 
     data_im = np.copy(data_im[x_start:x_end, y_start:y_end])
@@ -148,11 +164,11 @@ def _generate_one_slice(
 
 
 def _generate_slices(
-        source_volume: ndarray,
-        label_volume: ndarray,
-        crop_size: int,
-        labels: List[int],
-        slice_params: List[_SliceParams]
+    source_volume: ndarray,
+    label_volume: ndarray,
+    crop_size: int,
+    labels: List[int],
+    slice_params: List[_SliceParams],
 ) -> (np.ndarray, np.ndarray):
     """ Generates image slices from their _SliceParams objects """
 
@@ -160,12 +176,8 @@ def _generate_slices(
     n_labels = len(labels)
 
     # Initialization
-    X = np.empty(
-        (n_slices, crop_size, crop_size, 1), dtype=np.float
-    )
-    y = np.empty(
-        (n_slices, crop_size, crop_size, n_labels), dtype=np.uint8
-    )
+    X = np.empty((n_slices, crop_size, crop_size, 1), dtype=np.float)
+    y = np.empty((n_slices, crop_size, crop_size, n_labels), dtype=np.uint8)
 
     for example_index, sp in enumerate(slice_params):
         X[example_index, :, :, 0], y[example_index] = _generate_one_slice(
@@ -193,7 +205,9 @@ class VolumeImgSegmSequence(Sequence):
         n_geometric_augmentations: int = 0,
         random_state: int = 42,
         crop_size: int = 224,
-        force_shorter_epoch: Optional[int] = None  # todo assert, doc, and add a warning for this
+        force_shorter_epoch: Optional[
+            int
+        ] = None,  # todo assert, doc, and add a warning for this
     ):
         """
         Args:
@@ -223,7 +237,11 @@ class VolumeImgSegmSequence(Sequence):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.normalization_const = normalization_const
-        self.n_geometric_augmentations = len(GEOM_TRANSF) if n_geometric_augmentations == -1 else min(n_geometric_augmentations, len(GEOM_TRANSF))
+        self.n_geometric_augmentations = (
+            len(GEOM_TRANSF)
+            if n_geometric_augmentations == -1
+            else min(n_geometric_augmentations, len(GEOM_TRANSF))
+        )
         self.random_state: RandomState = RandomState(seed=random_state)
         self.crop_size = crop_size
         self.force_shorter_epoch = force_shorter_epoch
@@ -231,16 +249,20 @@ class VolumeImgSegmSequence(Sequence):
         self.shape = self.source_volume.shape
 
         # noinspection PyTypeChecker
-        self.slice_params: Dict[int, _SliceParams] = dict(enumerate([
-            _SliceParams(ax, coord, corn, geo_transf)
-            for ax in self.axes
-            for coord in range(self.shape[ax])
-            for corn in list(_Corner)
-            # select a number of random geometric augmentations, or None, or all
-            for geo_transf in _get_random_transformations(
-                n=self.n_geometric_augmentations, random_state=self.random_state
+        self.slice_params: Dict[int, _SliceParams] = dict(
+            enumerate(
+                [
+                    _SliceParams(ax, coord, corn, geo_transf)
+                    for ax in self.axes
+                    for coord in range(self.shape[ax])
+                    for corn in list(_Corner)
+                    # select a number of random geometric augmentations, or None, or all
+                    for geo_transf in _get_random_transformations(
+                        n=self.n_geometric_augmentations, random_state=self.random_state
+                    )
+                ]
             )
-        ]))
+        )
         self.ids: List[int] = list(self.slice_params.keys())
 
         self.on_epoch_end()  # shuffle (or not)
@@ -265,8 +287,6 @@ class VolumeImgSegmSequence(Sequence):
             label_volume=self.label_volume,
             crop_size=self.crop_size,
             labels=self.labels,
-            slice_params=batch_slice_params
+            slice_params=batch_slice_params,
         )
         return X / self.normalization_const, y
-
-

@@ -4,11 +4,10 @@ Huge kudos to https://stackoverflow.com/a/40135960
 import socket
 
 from IPython.core.ultratb import AutoFormattedTB
-
 from tomo2seg import slack
 
 # formatter for making the tracebacks into strings
-itb = AutoFormattedTB(mode='Plain', tb_offset=1)
+itb = AutoFormattedTB(mode="Plain", tb_offset=1)
 
 
 # this function will be called on exceptions in any cell

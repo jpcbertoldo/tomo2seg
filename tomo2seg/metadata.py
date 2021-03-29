@@ -88,14 +88,15 @@ class Metadata(YAMLObject):
 
     @classmethod
     def build(
-            cls,
-            model, 
-            model_paths: Model,
-            volume_paths: Volume,
-            train_generator: VolumeImgSegmSequence,
-            val_generator: VolumeImgSegmSequence,
-            nb_filters_0, input_shape,
-            n_epochs
+        cls,
+        model,
+        model_paths: Model,
+        volume_paths: Volume,
+        train_generator: VolumeImgSegmSequence,
+        val_generator: VolumeImgSegmSequence,
+        nb_filters_0,
+        input_shape,
+        n_epochs,
     ):
 
         train_x, train_y = train_generator[0]
@@ -123,7 +124,7 @@ class Metadata(YAMLObject):
                 str(model_paths.logger_path),
                 str(model_paths.summary_path),
                 str(model_paths.history_path),
-                metadata_yml=str(model_paths.metadata_yml_path)
+                metadata_yml=str(model_paths.metadata_yml_path),
             ),
             train=ds(
                 # todo make build classmethod for the sub classes as well
@@ -132,19 +133,21 @@ class Metadata(YAMLObject):
                     str(train_generator.source_volume.shape),
                     train_generator.source_volume.dtype.name,
                     train_generator.source_volume.nbytes,
-                    humanize.naturalsize(train_generator.source_volume.nbytes)
+                    humanize.naturalsize(train_generator.source_volume.nbytes),
                 ),
                 vol(
                     str(volume_paths.train_labels_path),
                     str(train_generator.label_volume.shape),
                     train_generator.label_volume.dtype.name,
                     train_generator.label_volume.nbytes,
-                    humanize.naturalsize(train_generator.label_volume.nbytes)
+                    humanize.naturalsize(train_generator.label_volume.nbytes),
                 ),
                 str(train_generator.axes),
                 train_generator.crop_size,
-                str(train_x.shape), train_x.dtype.name,
-                str(train_y.shape), train_y.dtype.name
+                str(train_x.shape),
+                train_x.dtype.name,
+                str(train_y.shape),
+                train_y.dtype.name,
             ),
             val=ds(
                 vol(
@@ -152,26 +155,32 @@ class Metadata(YAMLObject):
                     str(val_generator.source_volume.shape),
                     val_generator.source_volume.dtype.name,
                     val_generator.source_volume.nbytes,
-                    humanize.naturalsize(val_generator.source_volume.nbytes)
+                    humanize.naturalsize(val_generator.source_volume.nbytes),
                 ),
                 vol(
                     str(volume_paths.val_labels_path),
                     str(val_generator.label_volume.shape),
                     val_generator.label_volume.dtype.name,
                     val_generator.label_volume.nbytes,
-                    humanize.naturalsize(val_generator.label_volume.nbytes)
+                    humanize.naturalsize(val_generator.label_volume.nbytes),
                 ),
                 str(val_generator.axes),
                 val_generator.crop_size,
-                str(val_x.shape), val_x.dtype.name,
-                str(val_y.shape), val_y.dtype.name
+                str(val_x.shape),
+                val_x.dtype.name,
+                str(val_y.shape),
+                val_y.dtype.name,
             ),
             architecture=archi(
-                model.count_params(), humanize.intword(model.count_params()),
-                count_params(model.trainable_weights), humanize.intword(count_params(model.trainable_weights)),
-                count_params(model.non_trainable_weights), humanize.intword(count_params(model.non_trainable_weights)),
-                model.factory_function, nb_filters_0,
-                str(input_shape)
+                model.count_params(),
+                humanize.intword(model.count_params()),
+                count_params(model.trainable_weights),
+                humanize.intword(count_params(model.trainable_weights)),
+                count_params(model.non_trainable_weights),
+                humanize.intword(count_params(model.non_trainable_weights)),
+                model.factory_function,
+                nb_filters_0,
+                str(input_shape),
             ),
             batch_size=batch_size,
             n_batches_per_epoch=n_batches_per_epoch,
@@ -180,7 +189,7 @@ class Metadata(YAMLObject):
             n_epochs=n_epochs,
             optimizer=optimizer_name,
             learning_rate=f"{learning_rate:.2e}",
-            loss_func=f"{model.loss.__module__}.{model.loss.__name__}"
+            loss_func=f"{model.loss.__module__}.{model.loss.__name__}",
         )
 
     @property
@@ -190,6 +199,3 @@ class Metadata(YAMLObject):
     def save_yaml_file(self, metadata_yml_path: Path) -> None:
         with metadata_yml_path.open("w") as f:
             yaml.dump(self, f, default_flow_style=False, indent=4)
-
-
-

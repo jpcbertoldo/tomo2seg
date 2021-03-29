@@ -4,16 +4,17 @@ todo make this module batch-enabled
 todo make this all with keras backend
 """
 
+import warnings
+
 # Standard packages
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from dataclasses import dataclass, field, InitVar
+from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Callable, Type, Union, ClassVar
-import warnings
+from typing import Callable, ClassVar, Dict, List, Optional, Tuple, Type, Union
 
 # Installed packages
 import numpy as np
@@ -23,25 +24,27 @@ from numpy.random import RandomState
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import map_coordinates
 from tensorflow.keras.utils import Sequence
-
-from tomo2seg.logger import logger
 from tomo2seg.data import NORMALIZE_FACTORS
+from tomo2seg.logger import logger
 
 
 def __get_attr__(name):
-    
+
     if name == "NORMALIZE_FACTORS":
-        warnings.warn(f"Please use the version in the module `data.py`.", DeprecationWarning)
+        warnings.warn(
+            f"Please use the version in the module `data.py`.", DeprecationWarning
+        )
         return {
             "uint8": 255,
             "uint16": 65535,
         }
-    
+
     raise AttributeError(f"Module `{__name__}` does not have attribute `{name}`.")
 
 
 class GT2D(Enum):
     """Canonical 2D Geometric Transformation. Any other one is equivalent to these."""
+
     identity = 0
     rotation90 = 1
     flip_horizontal = 2
@@ -60,51 +63,51 @@ _GT2D_FUNCTIONS: Dict[GT2D, Callable[[ndarray], ndarray]] = {
     GT2D.flip_vertical: partial(np.flip, axis=1),
     GT2D.transpose: partial(np.transpose, axes=(1, 0)),
 }
-    
+
 
 def _compose(f: Callable, g: Callable) -> Callable:
     """(f, g) -> fog"""
+
     def composed_function(x):
         return f(g(x))
+
     return composed_function
 
 
 # composed transformations - any other combination will result in something equivalent to these here
 # todo verify compositions
-_GT2D_FUNCTIONS.update({
-    GT2D.flip_horizontal__transpose: _compose(
-        f=_GT2D_FUNCTIONS[GT2D.flip_horizontal],
-        g=_GT2D_FUNCTIONS[GT2D.transpose]
-    ),
-    GT2D.flip_vertical__flip_horizontal: _compose(
-        f=_GT2D_FUNCTIONS[GT2D.flip_vertical],
-        g=_GT2D_FUNCTIONS[GT2D.flip_horizontal]
-    ),
-    GT2D.rotation90__flip_vertical: _compose(
-        f=_GT2D_FUNCTIONS[GT2D.rotation90],
-        g=_GT2D_FUNCTIONS[GT2D.flip_vertical]
-    ),
-})
+_GT2D_FUNCTIONS.update(
+    {
+        GT2D.flip_horizontal__transpose: _compose(
+            f=_GT2D_FUNCTIONS[GT2D.flip_horizontal], g=_GT2D_FUNCTIONS[GT2D.transpose]
+        ),
+        GT2D.flip_vertical__flip_horizontal: _compose(
+            f=_GT2D_FUNCTIONS[GT2D.flip_vertical],
+            g=_GT2D_FUNCTIONS[GT2D.flip_horizontal],
+        ),
+        GT2D.rotation90__flip_vertical: _compose(
+            f=_GT2D_FUNCTIONS[GT2D.rotation90], g=_GT2D_FUNCTIONS[GT2D.flip_vertical]
+        ),
+    }
+)
 
-_GT2D_VAL2FUNC = {
-    gt.value: func for gt, func in _GT2D_FUNCTIONS.items()
-}
+_GT2D_VAL2FUNC = {gt.value: func for gt, func in _GT2D_FUNCTIONS.items()}
 
 
 _GT2HALFD_FUNCTIONS = deepcopy(_GT2D_FUNCTIONS)
-_GT2HALFD_FUNCTIONS.update({
-    GT2D.transpose: partial(np.transpose, axes=(1, 0, 2)),
-})
-_GT2HALFD_FUNCTIONS.update({
-    GT2D.flip_horizontal__transpose: _compose(
-        f=_GT2HALFD_FUNCTIONS[GT2D.flip_horizontal],
-        g=_GT2HALFD_FUNCTIONS[GT2D.transpose]
-    ),
-})
+_GT2HALFD_FUNCTIONS.update(
+    {GT2D.transpose: partial(np.transpose, axes=(1, 0, 2)),}
+)
+_GT2HALFD_FUNCTIONS.update(
+    {
+        GT2D.flip_horizontal__transpose: _compose(
+            f=_GT2HALFD_FUNCTIONS[GT2D.flip_horizontal],
+            g=_GT2HALFD_FUNCTIONS[GT2D.transpose],
+        ),
+    }
+)
 
-_GT2HALFD_VAL2FUNC = {
-    gt.value: func for gt, func in _GT2HALFD_FUNCTIONS.items()
-}
+_GT2HALFD_VAL2FUNC = {gt.value: func for gt, func in _GT2HALFD_FUNCTIONS.items()}
 
 
 def _get_random_gt_2d(random_state: RandomState) -> GT2D:
@@ -188,191 +191,145 @@ class GT3D(Enum):
 # a dictionary of transformations so that they can be referenced with a string key
 _GT3D_FUNCTIONS: Dict[GT3D, Callable[[ndarray], ndarray]] = {
     GT3D.identity: lambda x: x,  # identity
-
     GT3D.rotx90: partial(np.rot90, axes=(1, 2), k=1),
     GT3D.rotx180: partial(np.rot90, axes=(1, 2), k=2),
     GT3D.flipx: partial(np.flip, axis=0),
     GT3D.transpose_yz: partial(np.transpose, axes=(0, 2, 1)),
-
     GT3D.roty90: partial(np.rot90, axes=(2, 0), k=1),
     GT3D.roty180: partial(np.rot90, axes=(2, 0), k=2),
     GT3D.flipy: partial(np.flip, axis=1),
     GT3D.transpose_xz: partial(np.transpose, axes=(2, 1, 0)),
-
     GT3D.rotz90: partial(np.rot90, axes=(0, 1), k=1),
     GT3D.rotz180: partial(np.rot90, axes=(0, 1), k=2),
     GT3D.flipz: partial(np.flip, axis=2),
     GT3D.transpose_xy: partial(np.transpose, axes=(1, 0, 2)),
-
     GT3D.transpose_yzx: partial(np.transpose, axes=(1, 2, 0)),
     GT3D.transpose_zxy: partial(np.transpose, axes=(2, 0, 1)),
 }
 
 # composed transformations - any other combination will result in something equivalent to these here
-_GT3D_FUNCTIONS.update({
-    # combinations of 2 (30)
-    GT3D.rotx90_rotx180: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.rotx180],
-    ),
-    GT3D.rotx90_flipx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.flipx],
-    ),
-    GT3D.rotx90_flipy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.flipy],
-    ),
-    GT3D.rotx90_transpose_xz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-    ),
-    GT3D.rotx90_rotz90: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.rotz90],
-    ),
-    GT3D.rotx90_transpose_xy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
-    ),
-    GT3D.rotx90_transpose_yzx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
-    ),
-    GT3D.rotx90_transpose_zxy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
-    ),
-    GT3D.rotx180_flipx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.flipx],
-    ),
-    GT3D.rotx180_transpose_xz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-    ),
-    GT3D.rotx180_rotz90: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.rotz90],
-    ),
-    GT3D.rotx180_transpose_xy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
-    ),
-    GT3D.rotx180_transpose_yzx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
-    ),
-    GT3D.rotx180_transpose_zxy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx180],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
-    ),
-    GT3D.flipx_transpose_yz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
-    ),
-    GT3D.flipx_roty90: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.roty90],
-    ),
-    GT3D.flipx_flipy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.flipy],
-    ),
-    GT3D.flipx_transpose_xz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-    ),
-    GT3D.flipx_flipz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.flipz],
-    ),
-    GT3D.flipx_transpose_yzx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
-    ),
-    GT3D.flipx_transpose_zxy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipx],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
-    ),
-    GT3D.roty90_rotx180: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.roty90],
-        g=_GT3D_FUNCTIONS[GT3D.rotx180],
-    ),
-    GT3D.roty90_transpose_yz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.roty90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
-    ),
-    GT3D.roty90_transpose_xy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.roty90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
-    ),
-    GT3D.roty90_transpose_zxy: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.roty90],
-        g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
-    ),
-    GT3D.flipy_rotz90: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.flipy],
-        g=_GT3D_FUNCTIONS[GT3D.rotz90],
-    ),
-    GT3D.transpose_xz_rotx180: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-        g=_GT3D_FUNCTIONS[GT3D.rotx180],
-    ),
-    GT3D.rotz90_roty90: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotz90],
-        g=_GT3D_FUNCTIONS[GT3D.roty90],
-    ),
-    GT3D.rotz90_flipz: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotz90],
-        g=_GT3D_FUNCTIONS[GT3D.flipz],
-    ),
-    GT3D.transpose_zxy_rotx180: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
-        g=_GT3D_FUNCTIONS[GT3D.rotx180],
-    ),
+_GT3D_FUNCTIONS.update(
+    {
+        # combinations of 2 (30)
+        GT3D.rotx90_rotx180: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.rotx180],
+        ),
+        GT3D.rotx90_flipx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.flipx],
+        ),
+        GT3D.rotx90_flipy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.flipy],
+        ),
+        GT3D.rotx90_transpose_xz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+        ),
+        GT3D.rotx90_rotz90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.rotz90],
+        ),
+        GT3D.rotx90_transpose_xy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+        ),
+        GT3D.rotx90_transpose_yzx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+        ),
+        GT3D.rotx90_transpose_zxy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90], g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+        ),
+        GT3D.rotx180_flipx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.flipx],
+        ),
+        GT3D.rotx180_transpose_xz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+        ),
+        GT3D.rotx180_rotz90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.rotz90],
+        ),
+        GT3D.rotx180_transpose_xy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+        ),
+        GT3D.rotx180_transpose_yzx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+        ),
+        GT3D.rotx180_transpose_zxy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+        ),
+        GT3D.flipx_transpose_yz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
+        ),
+        GT3D.flipx_roty90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.roty90],
+        ),
+        GT3D.flipx_flipy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.flipy],
+        ),
+        GT3D.flipx_transpose_xz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+        ),
+        GT3D.flipx_flipz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.flipz],
+        ),
+        GT3D.flipx_transpose_yzx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.transpose_yzx],
+        ),
+        GT3D.flipx_transpose_zxy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+        ),
+        GT3D.roty90_rotx180: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.roty90], g=_GT3D_FUNCTIONS[GT3D.rotx180],
+        ),
+        GT3D.roty90_transpose_yz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.roty90], g=_GT3D_FUNCTIONS[GT3D.transpose_yz],
+        ),
+        GT3D.roty90_transpose_xy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.roty90], g=_GT3D_FUNCTIONS[GT3D.transpose_xy],
+        ),
+        GT3D.roty90_transpose_zxy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.roty90], g=_GT3D_FUNCTIONS[GT3D.transpose_zxy],
+        ),
+        GT3D.flipy_rotz90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.flipy], g=_GT3D_FUNCTIONS[GT3D.rotz90],
+        ),
+        GT3D.transpose_xz_rotx180: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.transpose_xz], g=_GT3D_FUNCTIONS[GT3D.rotx180],
+        ),
+        GT3D.rotz90_roty90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotz90], g=_GT3D_FUNCTIONS[GT3D.roty90],
+        ),
+        GT3D.rotz90_flipz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotz90], g=_GT3D_FUNCTIONS[GT3D.flipz],
+        ),
+        GT3D.transpose_zxy_rotx180: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.transpose_zxy], g=_GT3D_FUNCTIONS[GT3D.rotx180],
+        ),
+        # combinations of 3 (5)
+        GT3D.rotx90_rotx180_flipx: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90],
+            g=_compose(f=_GT3D_FUNCTIONS[GT3D.rotx180], g=_GT3D_FUNCTIONS[GT3D.flipx],),
+        ),
+        GT3D.rotx90_flipx_flipy: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90],
+            g=_compose(f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.flipy],),
+        ),
+        GT3D.rotx90_flipx_transpose_xz: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90],
+            g=_compose(
+                f=_GT3D_FUNCTIONS[GT3D.flipx], g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
+            ),
+        ),
+        GT3D.rotx90_flipy_rotz90: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90],
+            g=_compose(f=_GT3D_FUNCTIONS[GT3D.flipy], g=_GT3D_FUNCTIONS[GT3D.rotz90],),
+        ),
+        GT3D.rotx90_transpose_xz_rotx180: _compose(
+            f=_GT3D_FUNCTIONS[GT3D.rotx90],
+            g=_compose(
+                f=_GT3D_FUNCTIONS[GT3D.transpose_xz], g=_GT3D_FUNCTIONS[GT3D.rotx180],
+            ),
+        ),
+    }
+)
 
-    # combinations of 3 (5)
-    GT3D.rotx90_rotx180_flipx: _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_compose(
-            f=_GT3D_FUNCTIONS[GT3D.rotx180],
-            g=_GT3D_FUNCTIONS[GT3D.flipx],
-        ),
-    ),
-    GT3D.rotx90_flipx_flipy:  _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_compose(
-            f=_GT3D_FUNCTIONS[GT3D.flipx],
-            g=_GT3D_FUNCTIONS[GT3D.flipy],
-        ),
-    ),
-    GT3D.rotx90_flipx_transpose_xz:  _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_compose(
-            f=_GT3D_FUNCTIONS[GT3D.flipx],
-            g=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-        ),
-    ),
-    GT3D.rotx90_flipy_rotz90:  _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_compose(
-            f=_GT3D_FUNCTIONS[GT3D.flipy],
-            g=_GT3D_FUNCTIONS[GT3D.rotz90],
-        ),
-    ),
-    GT3D.rotx90_transpose_xz_rotx180:  _compose(
-        f=_GT3D_FUNCTIONS[GT3D.rotx90],
-        g=_compose(
-            f=_GT3D_FUNCTIONS[GT3D.transpose_xz],
-            g=_GT3D_FUNCTIONS[GT3D.rotx180],
-        ),
-    ),
-})
-
-_GT3D_VAL2FUNC = {
-    gt.value: func for gt, func in _GT3D_FUNCTIONS.items()
-}
+_GT3D_VAL2FUNC = {gt.value: func for gt, func in _GT3D_FUNCTIONS.items()}
 
 
 def _get_random_gt_3d(random_state: RandomState) -> GT3D:
@@ -383,20 +340,53 @@ def _get_random_gt_3d(random_state: RandomState) -> GT3D:
 @dataclass
 class ET:
     """ElasticTransformation. Stocks the 3D displacement of each of the 3D crop's 8 corners."""
+
     # c = corner
-    c000: Tuple[float, float, float] = (0., 0., 0,)
-    c100: Tuple[float, float, float] = (0., 0., 0,)
-    c010: Tuple[float, float, float] = (0., 0., 0,)
-    c110: Tuple[float, float, float] = (0., 0., 0,)
-    c001: Tuple[float, float, float] = (0., 0., 0,)
-    c101: Tuple[float, float, float] = (0., 0., 0,)
-    c011: Tuple[float, float, float] = (0., 0., 0,)
-    c111: Tuple[float, float, float] = (0., 0., 0,)
+    c000: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c100: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c010: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c110: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c001: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c101: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c011: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
+    c111: Tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0,
+    )
 
 
 @dataclass
 class GridPositionGenerator(ABC):
-    
+
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
@@ -404,12 +394,15 @@ class GridPositionGenerator(ABC):
     def __post_init__(self):
         for axis, axis_range in zip(range(3), self.axes_ranges):
             assert axis_range[0] <= axis_range[1], f"{axis=} {axis_range=}"
-        
+
         import functools
         import operator
         import humanize
+
         npositions = functools.reduce(operator.mul, self.axes_range_sizes)
-        logger.debug(f"{self.__class__.__name__} ==> {npositions=} ({humanize.intcomma(npositions)})")
+        logger.debug(
+            f"{self.__class__.__name__} ==> {npositions=} ({humanize.intcomma(npositions)})"
+        )
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -422,7 +415,10 @@ class GridPositionGenerator(ABC):
     def get(self, n: int) -> ndarray:  # (n, 3)
         assert n > 0
         grid_positions = self._concrete_getitem(n)
-        assert grid_positions.shape == (n, 3), f"{self.__class__.__name__=} {n=} {grid_positions.shape=}"
+        assert grid_positions.shape == (
+            n,
+            3,
+        ), f"{self.__class__.__name__=} {n=} {grid_positions.shape=}"
         return grid_positions
 
     @abstractmethod
@@ -431,7 +427,11 @@ class GridPositionGenerator(ABC):
 
     @classmethod
     def build_from_volume_crop_shapes(
-            cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int], *args, **kwargs
+        cls,
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
+        *args,
+        **kwargs,
     ):
         if "x_range" in kwargs or "y_range" in kwargs or "z_range" in kwargs:
             raise ValueError(
@@ -439,21 +439,24 @@ class GridPositionGenerator(ABC):
                 f"Please remove them. {list(kwargs.keys())=}"
             )
 
-        for axis, volume_axis_size, crop_axis_size in zip(range(3), volume_shape, crop_shape):
-            assert 0 < crop_axis_size <= volume_axis_size, f"{axis=} {crop_axis_size=} {volume_axis_size=}"
+        for axis, volume_axis_size, crop_axis_size in zip(
+            range(3), volume_shape, crop_shape
+        ):
+            assert (
+                0 < crop_axis_size <= volume_axis_size
+            ), f"{axis=} {crop_axis_size=} {volume_axis_size=}"
 
         ranges = {
             "x_range": (0, volume_shape[0] - crop_shape[0] + 1),
             "y_range": (0, volume_shape[1] - crop_shape[1] + 1),
             "z_range": (0, volume_shape[2] - crop_shape[2] + 1),
         }
-        logger.info(f"Built {cls.__name__} from {volume_shape=} and {crop_shape=} ==> {ranges}")
+        logger.info(
+            f"Built {cls.__name__} from {volume_shape=} and {crop_shape=} ==> {ranges}"
+        )
 
         # noinspection PyArgumentList
-        return cls(
-            *args,
-            **{**kwargs, **ranges}
-        )
+        return cls(*args, **{**kwargs, **ranges})
 
 
 @dataclass
@@ -462,14 +465,13 @@ class UniformGridPosition(GridPositionGenerator):
     random_state: RandomState
 
     def _concrete_getitem(self, n: int) -> ndarray:  # (n, 3)
-        return np.stack([
-            self.random_state.randint(
-                low=range_[0],
-                high=range_[1],
-                size=n
-            )
-            for range_ in self.axes_ranges  # x, y, z-range
-        ], axis=-1)
+        return np.stack(
+            [
+                self.random_state.randint(low=range_[0], high=range_[1], size=n)
+                for range_ in self.axes_ranges  # x, y, z-range
+            ],
+            axis=-1,
+        )
 
 
 @dataclass
@@ -484,51 +486,83 @@ class SequentialGridPosition(GridPositionGenerator):
         return self.n_steps_x, self.n_steps_y, self.n_steps_z
 
     def __post_init__(self):
-        for axis, axis_n_steps, axis_range_size in zip(range(3), self.axes_n_steps, self.axes_range_sizes):
-            assert 0 < axis_n_steps <= axis_range_size, f"{axis=} {axis_n_steps=} {axis_range_size=}"
+        for axis, axis_n_steps, axis_range_size in zip(
+            range(3), self.axes_n_steps, self.axes_range_sizes
+        ):
+            assert (
+                0 < axis_n_steps <= axis_range_size
+            ), f"{axis=} {axis_n_steps=} {axis_range_size=}"
 
-        self.positions = np.array([
-            [int(x), int(y), int(z)]
-            for z, y, x in product(
-                np.linspace(self.z_range[0], self.z_range[1] - 1, self.n_steps_z, endpoint=True),
-                np.linspace(self.y_range[0], self.y_range[1] - 1, self.n_steps_y, endpoint=True),
-                np.linspace(self.x_range[0], self.x_range[1] - 1, self.n_steps_x, endpoint=True),
-            )
-        ])
-        logger.info(f"The {self.__class__.__name__} has {len(self.positions)=} different positions (therefore crops).")
+        self.positions = np.array(
+            [
+                [int(x), int(y), int(z)]
+                for z, y, x in product(
+                    np.linspace(
+                        self.z_range[0],
+                        self.z_range[1] - 1,
+                        self.n_steps_z,
+                        endpoint=True,
+                    ),
+                    np.linspace(
+                        self.y_range[0],
+                        self.y_range[1] - 1,
+                        self.n_steps_y,
+                        endpoint=True,
+                    ),
+                    np.linspace(
+                        self.x_range[0],
+                        self.x_range[1] - 1,
+                        self.n_steps_x,
+                        endpoint=True,
+                    ),
+                )
+            ]
+        )
+        logger.info(
+            f"The {self.__class__.__name__} has {len(self.positions)=} different positions (therefore crops)."
+        )
         self.current_position = 0
 
     def __len__(self):
         return len(self.positions)
 
     def _concrete_getitem(self, n: int) -> ndarray:
-        positions = self.positions[self.current_position:(new_current := self.current_position + n)]
+        positions = self.positions[
+            self.current_position : (new_current := self.current_position + n)
+        ]
         self.current_position = new_current if new_current < len(self.positions) else 0
         if len(positions) < n:
             positions = np.r_[positions, (n - len(positions)) * [positions[-1, :]]]
         return positions
 
     @classmethod
-    def build_min_overlap(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int], **n_steps_kwargs):
+    def build_min_overlap(
+        cls,
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
+        **n_steps_kwargs,
+    ):
         n_steps = dict(
             n_steps_x=int(np.ceil(volume_shape[0] / crop_shape[0])),
             n_steps_y=int(np.ceil(volume_shape[1] / crop_shape[1])),
             n_steps_z=int(np.ceil(volume_shape[2] / crop_shape[2])),
         )
-        logger.info(f"Building {cls.__name__} with minimal overlap (smallest n_steps in each directions) {n_steps=}.")
+        logger.info(
+            f"Building {cls.__name__} with minimal overlap (smallest n_steps in each directions) {n_steps=}."
+        )
         if len(n_steps_kwargs) > 0:
             n_steps = {**n_steps, **n_steps_kwargs}
             logger.warning(f"{n_steps_kwargs=} was given --> effective {n_steps=}")
 
         # noinspection PyArgumentList
         return cls.build_from_volume_crop_shapes(
-            volume_shape=volume_shape,
-            crop_shape=crop_shape,
-            **n_steps,
+            volume_shape=volume_shape, crop_shape=crop_shape, **n_steps,
         )
 
     @classmethod
-    def build_all_positions(cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]):
+    def build_all_positions(
+        cls, volume_shape: Tuple[int, int, int], crop_shape: Tuple[int, int, int]
+    ):
         n_steps = dict(
             n_steps_x=volume_shape[0] - crop_shape[0] + 1,
             n_steps_y=volume_shape[1] - crop_shape[1] + 1,
@@ -536,9 +570,7 @@ class SequentialGridPosition(GridPositionGenerator):
         )
         # noinspection PyArgumentList
         return cls.build_from_volume_crop_shapes(
-            volume_shape=volume_shape,
-            crop_shape=crop_shape,
-            **n_steps,
+            volume_shape=volume_shape, crop_shape=crop_shape, **n_steps,
         )
 
 
@@ -558,8 +590,14 @@ class VoxelwiseProbabilityGridPotion(GridPositionGenerator):
 
     def __post_init__(self):
         self.vol_shape = vol_shape = self.probabilities_volume.shape
-        for axis, (start, stop), vol_axis_size in zip(range(3), self.axes_ranges, vol_shape):
-            assert (range_size := stop - start) == vol_axis_size, f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+        for axis, (start, stop), vol_axis_size in zip(
+            range(3), self.axes_ranges, vol_shape
+        ):
+            assert (
+                range_size := stop - start
+            ) == vol_axis_size, (
+                f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+            )
 
         # marginal probabilities of (i, j)
         self.ij_probas = self.probabilities_volume.sum(axis=2, keepdims=True)
@@ -569,15 +607,21 @@ class VoxelwiseProbabilityGridPotion(GridPositionGenerator):
         # probabilities P[i,j,k] become P[k|i,j]
         self.probabilities_volume /= self.ij_probas
         # doing it twice makes it more stable
-        self.probabilities_volume /= self.probabilities_volume.sum(axis=2, keepdims=True)
+        self.probabilities_volume /= self.probabilities_volume.sum(
+            axis=2, keepdims=True
+        )
 
         # get rid of unnecessary dimensions
         self.ij_probas = self.ij_probas[:, :, 0]
 
         # this is the tolerance of the function choice
         # https://github.com/numpy/numpy/blob/c2b6ab9924271b96d3c783f7818723a1bb8f511a/numpy/random/mtrand/mtrand.pyx#L1093
-        assert np.isclose((ij_probas_sum := self.ij_probas.sum()), 1., atol=1e-8), f"{ij_probas_sum=}"
-        assert np.all(np.isclose(self.probabilities_volume.sum(axis=2), 1., atol=1e-8)), "oops"
+        assert np.isclose(
+            (ij_probas_sum := self.ij_probas.sum()), 1.0, atol=1e-8
+        ), f"{ij_probas_sum=}"
+        assert np.all(
+            np.isclose(self.probabilities_volume.sum(axis=2), 1.0, atol=1e-8)
+        ), "oops"
 
         self.ij_probas = self.ij_probas.ravel()
         self.ij_sequentials = np.arange(vol_shape[0] * vol_shape[1])
@@ -585,21 +629,22 @@ class VoxelwiseProbabilityGridPotion(GridPositionGenerator):
 
     def _concrete_getitem(self, n_positions: int) -> ndarray:
         ns = self.random_state.choice(
-            self.ij_sequentials,
-            p=self.ij_probas,
-            replace=True,
-            size=n_positions
+            self.ij_sequentials, p=self.ij_probas, replace=True, size=n_positions
         )
         ijs = np.c_[ns // self.vol_shape[1], ns % self.vol_shape[1]]
-        return np.c_[ijs[:, 0], ijs[:, 1], [
-            self.random_state.choice(
-                self.k_sequentials,
-                p=self.probabilities_volume[i, j, :],
-                replace=True,
-                size=1
-            )
-            for i, j in ijs
-        ]]
+        return np.c_[
+            ijs[:, 0],
+            ijs[:, 1],
+            [
+                self.random_state.choice(
+                    self.k_sequentials,
+                    p=self.probabilities_volume[i, j, :],
+                    replace=True,
+                    size=1,
+                )
+                for i, j in ijs
+            ],
+        ]
 
 
 @dataclass
@@ -619,8 +664,14 @@ class VoxelwiseProbabilityGridPotion2(GridPositionGenerator):
 
     def __post_init__(self):
         self.vol_shape = vol_shape = self.probabilities_volume.shape
-        for axis, (start, stop), vol_axis_size in zip(range(3), self.axes_ranges, vol_shape):
-            assert (range_size := stop - start) == vol_axis_size, f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+        for axis, (start, stop), vol_axis_size in zip(
+            range(3), self.axes_ranges, vol_shape
+        ):
+            assert (
+                range_size := stop - start
+            ) == vol_axis_size, (
+                f"Incompatible on {axis=} {range_size=} {vol_axis_size=}"
+            )
 
         # marginal probabilities of (i, j)
         self.ij_probas = self.probabilities_volume.sum(axis=2, keepdims=True)
@@ -630,7 +681,9 @@ class VoxelwiseProbabilityGridPotion2(GridPositionGenerator):
         # probabilities P[i,j,k] become P[k|i,j]
         self.probabilities_volume /= self.ij_probas
         # doing it twice makes it more stable
-        self.probabilities_volume /= self.probabilities_volume.sum(axis=2, keepdims=True)
+        self.probabilities_volume /= self.probabilities_volume.sum(
+            axis=2, keepdims=True
+        )
 
         # get rid of unnecessary dimensions
         self.ij_probas = self.ij_probas[:, :, 0]
@@ -650,9 +703,13 @@ class VoxelwiseProbabilityGridPotion2(GridPositionGenerator):
 
         # this is the tolerance of the function choice
         # https://github.com/numpy/numpy/blob/c2b6ab9924271b96d3c783f7818723a1bb8f511a/numpy/random/mtrand/mtrand.pyx#L1093
-        assert np.isclose((i_probas_sum := self.i_probas.sum()), 1., atol=1e-8), f"{i_probas_sum=}"
-        assert np.all(np.isclose(self.ij_probas.sum(axis=1), 1., atol=1e-8)), "oops"
-        assert np.all(np.isclose(self.probabilities_volume.sum(axis=2), 1., atol=1e-8)), "oops"
+        assert np.isclose(
+            (i_probas_sum := self.i_probas.sum()), 1.0, atol=1e-8
+        ), f"{i_probas_sum=}"
+        assert np.all(np.isclose(self.ij_probas.sum(axis=1), 1.0, atol=1e-8)), "oops"
+        assert np.all(
+            np.isclose(self.probabilities_volume.sum(axis=2), 1.0, atol=1e-8)
+        ), "oops"
 
         self.i_sequentials = np.arange(vol_shape[0])
         self.j_sequentials = np.arange(vol_shape[1])
@@ -660,30 +717,31 @@ class VoxelwiseProbabilityGridPotion2(GridPositionGenerator):
 
     def _concrete_getitem(self, n_positions: int) -> ndarray:
         is_ = self.random_state.choice(
-            self.i_sequentials,
-            p=self.i_probas,
-            replace=True,
-            size=n_positions
+            self.i_sequentials, p=self.i_probas, replace=True, size=n_positions
         )
-        ijs = np.c_[is_, [
-            self.random_state.choice(
-                self.j_sequentials,
-                p=self.ij_probas[i, :],
-                replace=True,
-                size=1,
-            )
-            for i in is_
-        ]]
+        ijs = np.c_[
+            is_,
+            [
+                self.random_state.choice(
+                    self.j_sequentials, p=self.ij_probas[i, :], replace=True, size=1,
+                )
+                for i in is_
+            ],
+        ]
 
-        return np.c_[ijs[:, 0], ijs[:, 1], [
-            self.random_state.choice(
-                self.k_sequentials,
-                p=self.probabilities_volume[i, j, :],
-                replace=True,
-                size=1
-            )
-            for i, j in ijs
-        ]]
+        return np.c_[
+            ijs[:, 0],
+            ijs[:, 1],
+            [
+                self.random_state.choice(
+                    self.k_sequentials,
+                    p=self.probabilities_volume[i, j, :],
+                    replace=True,
+                    size=1,
+                )
+                for i, j in ijs
+            ],
+        ]
 
 
 @dataclass
@@ -692,6 +750,7 @@ class ProbabilityField3D(ABC):
     Each position of the volume has a probability distribution over the possible values.
     It supposes a regular grid of unitary steps in every axis.
     """
+
     random_state: Optional[RandomState]  # some concrete classes are deterministic
 
     # they are None because they might be inferred from the grid position generator
@@ -722,8 +781,12 @@ class ProbabilityField3D(ABC):
         return self.x_range, self.y_range, self.z_range
 
     def __getitem__(self, coordinates3d: Tuple[int, int, int]):
-        for axis, coord, axis_lim in zip(range(3), coordinates3d, [self.x_range, self.y_range, self.z_range]):
-            assert axis_lim[0] <= coord < axis_lim[1], f"{coord=} on {axis=} out of range {axis_lim=}"
+        for axis, coord, axis_lim in zip(
+            range(3), coordinates3d, [self.x_range, self.y_range, self.z_range]
+        ):
+            assert (
+                axis_lim[0] <= coord < axis_lim[1]
+            ), f"{coord=} on {axis=} out of range {axis_lim=}"
         return self._concrete_getitem(*coordinates3d)
 
     @abstractmethod
@@ -770,82 +833,71 @@ class GTUniformEverywhere(ProbabilityField3D):
             return _get_random_gt_3d(random_state=self.random_state)
 
         else:
-            raise ValueError(f"Unknown type of Geometric Transformation. {self.gt_type=}")
+            raise ValueError(
+                f"Unknown type of Geometric Transformation. {self.gt_type=}"
+            )
 
     @classmethod
     def build_2d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls(
-            *args,
-            gt_type=GT2D,
-            **kwargs,
-        )
+        return cls(*args, gt_type=GT2D, **kwargs,)
 
     @classmethod
     def build_3d(cls, *args, **kwargs):
         # noinspection PyArgumentList
-        return cls(
-            *args,
-            gt_type=GT3D,
-            **kwargs,
-        )
+        return cls(*args, gt_type=GT3D, **kwargs,)
 
 
 @dataclass
 class GTUniformEverywhere2(ProbabilityField3D):
-    
+
     gt_type: Type = GT3D  # GT2D or GT3D
-    gt_name_list: List[str] = field(default_factory=lambda: []) # the names
-        
+    gt_name_list: List[str] = field(default_factory=lambda: [])  # the names
+
     def __post_init__(self, *args, **kwargs):
         # noinspection PyArgumentList
         super().__post_init__(*args, **kwargs)
-        
+
         for gt_name in self.gt_name_list:
             self.gt_type[gt_name]
-        
+
         logger.debug(f"{len(self.gt_name_list)=}")
- 
+
     def _concrete_getitem(self, x: int, y: int, z: int):
         """
         todo make this batch-enabled
         """
-        
+
         gt_name = self.random_state.choice(self.gt_name_list, 1, replace=False)[0]
         return self.gt_type[gt_name]
-    
+
     def build_all(cls, gt_type: Type, *args, **kwargs):
         return cls(
             *args,
             gt_type=gt_type,
-            gt_name_list=[
-                s.lstrip(f"{gt_type.__name__}.") 
-                for s in map(str, gt_type)
-            ],
+            gt_name_list=[s.lstrip(f"{gt_type.__name__}.") for s in map(str, gt_type)],
             **kwargs,
         )
-    
+
     def gt_no_transpose_rot(cls, gt_type: Type, *args, **kwargs):
         return cls(
             *args,
             gt_type=gt_type,
             gt_name_list=[
-                s.lstrip(f"{gt_type.__name__}.") 
+                s.lstrip(f"{gt_type.__name__}.")
                 for s in map(str, gt_type)
                 # todo improve this to make sure the end shape is the same
-                if "transpose" not in s
-                and not ("rot" in s and "90" in s)
+                if "transpose" not in s and not ("rot" in s and "90" in s)
             ],
             **kwargs,
         )
 
 
-    
 @dataclass
 class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
-    shift: float = 0.  # shift on the normalized range [0, 1]
+    shift: float = 0.0  # shift on the normalized range [0, 1]
     random_state: Optional[RandomState] = None
 
     def __post_init__(self, *args, **kwargs):
@@ -859,15 +911,15 @@ class VSConstantEverywhere(ProbabilityField3D):
     @classmethod
     def build_no_shift(cls, **kwargs):
         # noinspection PyArgumentList
-        return cls(shift=0., **kwargs)
+        return cls(shift=0.0, **kwargs)
 
 
 @dataclass
 class VSUniformEverywhere(ProbabilityField3D):
     """Values shift is a random value in a uniform interval [shift_min, shift_max] everywhere."""
 
-    shift_min: float = 0.  # shifts on the normalized range [0, 1]
-    shift_max: float = 0.
+    shift_min: float = 0.0  # shifts on the normalized range [0, 1]
+    shift_max: float = 0.0
 
     def __post_init__(self, *args, **kwargs):
         # noinspection PyArgumentList
@@ -878,9 +930,7 @@ class VSUniformEverywhere(ProbabilityField3D):
 
     def _concrete_getitem(self, *_):
         return self.random_state.uniform(
-            low=self.shift_min,
-            high=self.shift_max,
-            size=None,  # scalar is returned
+            low=self.shift_min, high=self.shift_max, size=None,  # scalar is returned
         )
 
     @classmethod
@@ -903,9 +953,7 @@ def uniform_cuboid(
     # noinspection PyTypeChecker
     return tuple(
         (
-            random_state.uniform(
-                low=range_[0], high=range_[1], size=None,
-            )
+            random_state.uniform(low=range_[0], high=range_[1], size=None,)
             if range_[1] > range_[0]
             else 0
         )
@@ -996,15 +1044,15 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
             transformed_corner3d = uniform_cuboid_(
                 x_range=(
                     max(self.crop_xlim[0], x - self.cuboid_shape[0]),
-                    min(self.crop_xlim[1], x + self.cuboid_shape[0])
+                    min(self.crop_xlim[1], x + self.cuboid_shape[0]),
                 ),
                 y_range=(
                     max(self.crop_ylim[0], y - self.cuboid_shape[1]),
-                    min(self.crop_ylim[1], y + self.cuboid_shape[1])
+                    min(self.crop_ylim[1], y + self.cuboid_shape[1]),
                 ),
                 z_range=(
                     max(self.crop_zlim[0], z - self.cuboid_shape[2]),
-                    min(self.crop_zlim[1], z + self.cuboid_shape[2])
+                    min(self.crop_zlim[1], z + self.cuboid_shape[2]),
                 ),
             )
 
@@ -1024,7 +1072,7 @@ class ET3DUniformCuboidAlmostEverywhere(ProbabilityField3D):
         in all the axes, so there is no overlap between each voxel's domain.
         """
         # noinspection PyArgumentList
-        return cls(*args, cuboid_shape=(.5, .5, .5), **kwargs)
+        return cls(*args, cuboid_shape=(0.5, 0.5, 0.5), **kwargs)
 
 
 @dataclass
@@ -1037,7 +1085,7 @@ class MetaCrop3D:
     et: Optional[ET]
     gt: Union[GT2D, GT3D]
     vs: float  # shift on the normalized range [0, 1]
-    
+
     is_2halfd: bool = False
 
     @property
@@ -1047,10 +1095,7 @@ class MetaCrop3D:
     @property
     def shape(self) -> Tuple[int, int, int]:
         # noinspection PyTypeChecker
-        return tuple(
-            axis.stop - axis.start
-            for axis in self.slice
-        )
+        return tuple(axis.stop - axis.start for axis in self.slice)
 
     def get_corner_coords(self, x_: int, y_: int, z_: int) -> Tuple[int, int, int]:
         assert x_ in (0, 1)
@@ -1062,7 +1107,9 @@ class MetaCrop3D:
             self.z.stop if z_ == 1 else self.z.start,
         )
 
-    def get_et_corner_coords(self,  x_: int, y_: int, z_: int) -> Tuple[float, float, float]:
+    def get_et_corner_coords(
+        self, x_: int, y_: int, z_: int
+    ) -> Tuple[float, float, float]:
         assert x_ in (0, 1), f"{x_=}"
         assert y_ in (0, 1), f"{y_=}"
         assert z_ in (0, 1), f"{z_=}"
@@ -1070,8 +1117,7 @@ class MetaCrop3D:
         return tuple(
             coord + displacement
             for coord, displacement in zip(
-                self.get_corner_coords(x_, y_, z_),
-                getattr(self.et, f"c{x_}{y_}{z_}")
+                self.get_corner_coords(x_, y_, z_), getattr(self.et, f"c{x_}{y_}{z_}")
             )
         )
 
@@ -1095,10 +1141,12 @@ class MetaCrop3D:
     def to_csv_line(self) -> str:
         # todo fix this to use ; or generalize it
         return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs},{self.is_2halfd}"
-    
+
     @classmethod
     def from_csv_line(cls, line: str) -> "MetaCrop3D":
         pieces = line.split(";")
+
+
 #         return cls(
 #             x=
 #         )
@@ -1115,11 +1163,11 @@ def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
 
 
 def meta2crop(
-        meta_crop: MetaCrop3D,
-        volume: ndarray,
-        is_label: bool,
-        interpolation: str,
-        spline_order: int = None,
+    meta_crop: MetaCrop3D,
+    volume: ndarray,
+    is_label: bool,
+    interpolation: str,
+    spline_order: int = None,
 ) -> np.ndarray:
     """
     todo? make this function multichannel enabled
@@ -1130,11 +1178,13 @@ def meta2crop(
     :param interpolation: "spline", "nearest"
     :return:
     """
-    assert (is_label and interpolation == "nearest") or not is_label, \
-        "Labels should only be interpolated with he nearest neighbor because it is a categorical value."
+    assert (
+        is_label and interpolation == "nearest"
+    ) or not is_label, "Labels should only be interpolated with he nearest neighbor because it is a categorical value."
 
-    assert not (meta_crop.et is not None and interpolation == "spline" and spline_order is None), \
-        "If elastic transformation is used then the interpolation spline order has to be given."
+    assert not (
+        meta_crop.et is not None and interpolation == "spline" and spline_order is None
+    ), "If elastic transformation is used then the interpolation spline order has to be given."
 
     if meta_crop.et is None:
         crop = volume[meta_crop.slice].copy()
@@ -1144,24 +1194,29 @@ def meta2crop(
         zbin = (0,) if meta_crop.is2d_on(2) else (0, 1)
         corners_binaries = list(product(xbin, ybin, zbin))
 
-        ijk_grid_corners = np.array([
+        ijk_grid_corners = np.array(
             [
-                0 if c == 0 else s - 1
-                for c, s in zip(corner, meta_crop.shape)
+                [0 if c == 0 else s - 1 for c, s in zip(corner, meta_crop.shape)]
+                for corner in corners_binaries
             ]
-            for corner in corners_binaries
-        ])  # 4x3 or 8x3
+        )  # 4x3 or 8x3
 
-        ijk_grid_points = np.array(list(product(
-            np.arange(meta_crop.shape[0]),
-            np.arange(meta_crop.shape[1]),
-            np.arange(meta_crop.shape[2]),
-        )))
+        ijk_grid_points = np.array(
+            list(
+                product(
+                    np.arange(meta_crop.shape[0]),
+                    np.arange(meta_crop.shape[1]),
+                    np.arange(meta_crop.shape[2]),
+                )
+            )
+        )
 
-        et_grid_corner_coords = np.array([
-            meta_crop.get_et_corner_coords(ci_, cj_, ck_)
-            for ci_, cj_, ck_ in corners_binaries
-        ])  # 4x3 or 8x3
+        et_grid_corner_coords = np.array(
+            [
+                meta_crop.get_et_corner_coords(ci_, cj_, ck_)
+                for ci_, cj_, ck_ in corners_binaries
+            ]
+        )  # 4x3 or 8x3
 
         if meta_crop.is2d:
             axes = [0, 1, 2]
@@ -1181,11 +1236,13 @@ def meta2crop(
 
         et_grid_coords = np.stack(
             [
-                meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis] * np.ones(ijk_grid_points.shape[0])
-                if meta_crop.is2d_on(dim) else
-                get_et_grid_coords(dim)
+                meta_crop.get_corner_coords(0, 0, 0)[meta_crop.flat_axis]
+                * np.ones(ijk_grid_points.shape[0])
+                if meta_crop.is2d_on(dim)
+                else get_et_grid_coords(dim)
                 for dim in range(3)
-            ], axis=-1
+            ],
+            axis=-1,
         )  # n_grid_points x 3
 
         if interpolation == "spline":
@@ -1201,10 +1258,7 @@ def meta2crop(
         elif interpolation == "nearest":
             # todo keep this somewhere to avoid generating?
             crop = sp.interpolate.interpn(
-                points=list(
-                    np.arange(volume.shape[dim])
-                    for dim in range(3)
-                ),
+                points=list(np.arange(volume.shape[dim]) for dim in range(3)),
                 values=volume,
                 xi=et_grid_coords,
                 method="nearest",
@@ -1220,7 +1274,7 @@ def meta2crop(
             func = _GT2HALFD_VAL2FUNC[meta_crop.gt.value]
         else:
             func = _GT2D_VAL2FUNC[meta_crop.gt.value]
-        
+
     else:
         func = _GT3D_VAL2FUNC[meta_crop.gt.value]
 
@@ -1244,7 +1298,7 @@ def meta2crop(
     else:
         crop += meta_crop.vs
         # the transformations might result in something out of the normalized range
-        crop = np.clip(crop, a_min=0., a_max=1.)
+        crop = np.clip(crop, a_min=0.0, a_max=1.0)
         return crop
 
 
@@ -1257,12 +1311,15 @@ class MetaCrop3DGenerator:
     et_field: ProbabilityField3D
     gt_field: ProbabilityField3D
     vs_field: ProbabilityField3D
-    
+
     is_2halfd: bool = False
 
     def __post_init__(self):
 
-        assert all(0 < s <= axis_size for s, axis_size in zip(self.crop_shape, self.volume_shape))
+        assert all(
+            0 < s <= axis_size
+            for s, axis_size in zip(self.crop_shape, self.volume_shape)
+        )
 
         # make sure it wont try to slice something beyond the 3d array
         # the crops are referenced by their 000 corner (i.e. the lowest x, y, z)
@@ -1271,7 +1328,8 @@ class MetaCrop3DGenerator:
             volume_axis_size = self.volume_shape[axis_idx]
             crop_axis_size = self.crop_shape[axis_idx]
             assert (
-                    0 <= axis_range[0] and axis_range[1] <= volume_axis_size - crop_axis_size + 1
+                0 <= axis_range[0]
+                and axis_range[1] <= volume_axis_size - crop_axis_size + 1
             ), f"{axis_range=} of {axis_idx=} is incompatible with {volume_axis_size=} and { crop_axis_size=}"
 
         for axis_idx in range(3):
@@ -1280,9 +1338,9 @@ class MetaCrop3DGenerator:
             gt_range = self.gt_field.axes_ranges[axis_idx]
             vs_range = self.vs_field.axes_ranges[axis_idx]
             # the grid position generator's range (xyz_range) is the reference because it was verified above
-            assert (xyz_range == et_range), f"Incompatible {et_range=} with {xyz_range=}"
-            assert (xyz_range == gt_range), f"Incompatible {gt_range=} with {xyz_range=}"
-            assert (xyz_range == vs_range), f"Incompatible {vs_range=} with {xyz_range=}"
+            assert xyz_range == et_range, f"Incompatible {et_range=} with {xyz_range=}"
+            assert xyz_range == gt_range, f"Incompatible {gt_range=} with {xyz_range=}"
+            assert xyz_range == vs_range, f"Incompatible {vs_range=} with {xyz_range=}"
 
     def get(self, n: int) -> List[MetaCrop3D]:
         x0y0z0_array = self.x0y0z0_generator.get(n)  # n x 3
@@ -1298,12 +1356,12 @@ class MetaCrop3DGenerator:
             )
             for x, y, z in x0y0z0_array
         ]
-    
+
     @classmethod
     def build_setup_train00(
-        cls, 
-        volume_shape: Tuple[int, int, int], 
-        crop_shape: Tuple[int, int, int], 
+        cls,
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
@@ -1314,45 +1372,42 @@ class MetaCrop3DGenerator:
             normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
 
         except KeyError:
-            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+            raise ValueError(
+                f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}"
+            )
 
         grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
-            volume_shape=volume_shape, 
+            volume_shape=volume_shape,
             crop_shape=crop_shape,
             random_state=RandomState(common_random_state_seed),
         )
-        
+
         return cls(
             volume_shape=volume_shape,
             crop_shape=crop_shape,
-            
             x0y0z0_generator=grid_pos_gen,
-            
             # it is too slow to use this
             et_field=ET3DConstantEverywhere.build_no_displacement(
                 grid_position_generator=grid_pos_gen
             ),
-            
             gt_field=GTUniformEverywhere(
                 gt_type=gt_type,
                 random_state=RandomState(common_random_state_seed),
                 grid_position_generator=grid_pos_gen,
             ),
-            
             vs_field=VSUniformEverywhere.build_plus_or_mines(
-                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
+                shift=1.0 / normalize_factor / 2,  # half a value to both sides +/-
                 grid_position_generator=grid_pos_gen,
                 random_state=RandomState(common_random_state_seed),
             ),
-            
             is_2halfd=is_2halfd,
         )
-    
+
     @classmethod
     def build_setup_train01(
-        cls, 
-        volume_shape: Tuple[int, int, int], 
-        crop_shape: Tuple[int, int, int], 
+        cls,
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
@@ -1365,48 +1420,49 @@ class MetaCrop3DGenerator:
             normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
 
         except KeyError:
-            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+            raise ValueError(
+                f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}"
+            )
 
         grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
-            volume_shape=volume_shape, 
+            volume_shape=volume_shape,
             crop_shape=crop_shape,
             random_state=RandomState(common_random_state_seed),
         )
-        
-        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
-        
+
+        gt_build_func = (
+            GTUniformEverywhere2.gt_no_transpose_rot
+            if gt_no_transpose_rot
+            else GTUniformEverywhere2.build_all
+        )
+
         return cls(
             volume_shape=volume_shape,
             crop_shape=crop_shape,
-            
             x0y0z0_generator=grid_pos_gen,
-            
             # it is too slow to use this
             et_field=ET3DConstantEverywhere.build_no_displacement(
                 grid_position_generator=grid_pos_gen
             ),
-            
             gt_field=gt_build_func(
                 GTUniformEverywhere2,
                 gt_type=gt_type,
                 random_state=RandomState(common_random_state_seed),
                 grid_position_generator=grid_pos_gen,
             ),
-            
             vs_field=VSUniformEverywhere.build_plus_or_mines(
-                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
+                shift=1.0 / normalize_factor / 2,  # half a value to both sides +/-
                 grid_position_generator=grid_pos_gen,
                 random_state=RandomState(common_random_state_seed),
             ),
-            
             is_2halfd=is_2halfd,
         )
-    
+
     @classmethod
     def build_setup_crack_train00(
-        cls, 
-        volume_shape: Tuple[int, int, int], 
-        crop_shape: Tuple[int, int, int], 
+        cls,
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
@@ -1416,74 +1472,81 @@ class MetaCrop3DGenerator:
         """just like build_setup_train00 with an adaptation to use GTUniformEverywhere2 and no VS"""
 
         grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
-            volume_shape=volume_shape, 
+            volume_shape=volume_shape,
             crop_shape=crop_shape,
             random_state=RandomState(common_random_state_seed),
         )
-        
-        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
-        
+
+        gt_build_func = (
+            GTUniformEverywhere2.gt_no_transpose_rot
+            if gt_no_transpose_rot
+            else GTUniformEverywhere2.build_all
+        )
+
         return cls(
             volume_shape=volume_shape,
             crop_shape=crop_shape,
-            
             x0y0z0_generator=grid_pos_gen,
-            
             # it is too slow to use this
             et_field=ET3DConstantEverywhere.build_no_displacement(
                 grid_position_generator=grid_pos_gen
             ),
-            
             gt_field=gt_build_func(
                 GTUniformEverywhere2,
                 gt_type=gt_type,
                 random_state=RandomState(common_random_state_seed),
                 grid_position_generator=grid_pos_gen,
             ),
-            
             vs_field=VSConstantEverywhere.build_no_shift(
-#                 random_state=RandomState(common_random_state_seed),
+                #                 random_state=RandomState(common_random_state_seed),
                 grid_position_generator=grid_pos_gen,
             ),
-            
             is_2halfd=is_2halfd,
         )
-    
+
     @classmethod
     def build_setup_val00(cls, *args, **kwargs):
         """this is here just for back compatibility"""
         return cls.build_no_augmentation(*args, **kwargs)
-    
+
     @classmethod
     def build_no_augmentation(
-        cls, 
+        cls,
         grid_pos_gen: Optional[GridPositionGenerator],
-        volume_shape: Tuple[int, int, int], 
-        crop_shape: Tuple[int, int, int], 
+        volume_shape: Tuple[int, int, int],
+        crop_shape: Tuple[int, int, int],
         common_random_state_seed: int,
         gt_type: Type,
         is_2halfd: bool,
     ):
         if grid_pos_gen is None:
             grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
-                volume_shape=volume_shape, 
+                volume_shape=volume_shape,
                 crop_shape=crop_shape,
                 random_state=RandomState(common_random_state_seed),
             )
-        
+
         return cls(
             volume_shape=volume_shape,
             crop_shape=crop_shape,
             x0y0z0_generator=grid_pos_gen,
-            et_field=ET3DConstantEverywhere.build_no_displacement(grid_position_generator=grid_pos_gen),
-            gt_field=(
-                GTConstantEverywhere.build_gt3d_identity(grid_position_generator=grid_pos_gen) if gt_type == GT3D else
-                GTConstantEverywhere.build_gt2d_identity(grid_position_generator=grid_pos_gen) 
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
             ),
-            vs_field=VSConstantEverywhere.build_no_shift(grid_position_generator=grid_pos_gen),
+            gt_field=(
+                GTConstantEverywhere.build_gt3d_identity(
+                    grid_position_generator=grid_pos_gen
+                )
+                if gt_type == GT3D
+                else GTConstantEverywhere.build_gt2d_identity(
+                    grid_position_generator=grid_pos_gen
+                )
+            ),
+            vs_field=VSConstantEverywhere.build_no_shift(
+                grid_position_generator=grid_pos_gen
+            ),
             is_2halfd=is_2halfd,
         )
-        
 
 
 @dataclass
@@ -1518,22 +1581,30 @@ class VolumeCropSequence(Sequence):
 
     def __post_init__(self, debug__no_data_check):
 
-        assert not (self.output_as_2d and self.output_as_2halfd), "Choose only one or none of them."
+        assert not (
+            self.output_as_2d and self.output_as_2halfd
+        ), "Choose only one or none of them."
 
         if self.output_as_2d:
             assert (
-                self.meta_crop_generator.crop_shape[0] == 1 
-                or self.meta_crop_generator.crop_shape[1] == 1 
-                or self.meta_crop_generator.crop_shape[2] == 1 
+                self.meta_crop_generator.crop_shape[0] == 1
+                or self.meta_crop_generator.crop_shape[1] == 1
+                or self.meta_crop_generator.crop_shape[2] == 1
             ), f"{self.meta_crop_generator.crop_shape=} not compatible with {self.output_as_2d=}, at least one axis must be of size 1."
-            
+
         if self.output_as_2halfd:
-            logger.warning(f"{self.output_as_2halfd=} only xy layers is available for 2.5d now!")
-            
-            assert (nlayers := self.meta_crop_generator.crop_shape[2]) % 2 == 1, f"{nlayers=} must be odd."
+            logger.warning(
+                f"{self.output_as_2halfd=} only xy layers is available for 2.5d now!"
+            )
+
+            assert (
+                nlayers := self.meta_crop_generator.crop_shape[2]
+            ) % 2 == 1, f"{nlayers=} must be odd."
             assert nlayers > 1, f"{nlayers=} is not 2.5d!"
-            
-            assert self.meta_crop_generator.is_2halfd, "Oops, you gotta be consistent with your choices."
+
+            assert (
+                self.meta_crop_generator.is_2halfd
+            ), "Oops, you gotta be consistent with your choices."
 
             # here we can assume nlayers to be odd and at least 3
             # it is supposed that the middle layer is the target
@@ -1545,16 +1616,24 @@ class VolumeCropSequence(Sequence):
             raise NotImplementedError("Multi channel 3D not supported.")
         assert self.data_volume.ndim == 3
 
-        assert self.data_volume.shape == self.labels_volume.shape == self.meta_crop_generator.volume_shape
+        assert (
+            self.data_volume.shape
+            == self.labels_volume.shape
+            == self.meta_crop_generator.volume_shape
+        )
         self.volume_shape = self.data_volume.shape
 
         if not debug__no_data_check:
-            logger.debug("Checking values and labels consistency, this might be a bit slow.")
-            assert (data_max_val := np.max(self.data_volume, axis=None)) <= 1., \
-                f"{data_max_val=} > 1. Did you forget to normalize?"
+            logger.debug(
+                "Checking values and labels consistency, this might be a bit slow."
+            )
+            assert (
+                data_max_val := np.max(self.data_volume, axis=None)
+            ) <= 1.0, f"{data_max_val=} > 1. Did you forget to normalize?"
 
-            assert (data_min_val := np.min(self.data_volume, axis=None)) >= 0., \
-                f"{data_min_val=} < 0. Did you forget to normalize?"
+            assert (
+                data_min_val := np.min(self.data_volume, axis=None)
+            ) >= 0.0, f"{data_min_val=} < 0. Did you forget to normalize?"
 
             assert all(lab in self.labels for lab in np.unique(self.labels_volume))
 
@@ -1567,11 +1646,15 @@ class VolumeCropSequence(Sequence):
 
         if self.meta_crops_hist_path is not None:
             if not self.meta_crops_hist_path.exists():
-                logger.info("A meta crops history file path was given but it still doesn't exist. Writing csv headers.")
+                logger.info(
+                    "A meta crops history file path was given but it still doesn't exist. Writing csv headers."
+                )
                 with self.meta_crops_hist_path.open("w") as f:
                     f.write(f"batch_idx,{MetaCrop3D.csv_header}")
         else:
-            logger.warning("No meta crops history file path given. The randomly generated crops will not be saved!")
+            logger.warning(
+                "No meta crops history file path given. The randomly generated crops will not be saved!"
+            )
 
         # noinspection PyTypeChecker,PyUnresolvedReferences
         self.meta2data = partial(
@@ -1580,9 +1663,7 @@ class VolumeCropSequence(Sequence):
             is_label=False,
             interpolation="spline",
             spline_order=getattr(
-                self.meta_crop_generator.et_field,
-                "spline_order",
-                None
+                self.meta_crop_generator.et_field, "spline_order", None
             ),
         )
         # noinspection PyTypeChecker
@@ -1596,7 +1677,7 @@ class VolumeCropSequence(Sequence):
 
     def on_epoch_end(self):
         if self.meta_crops_hist_path is not None:
-            with self.meta_crops_hist_path.open(mode='a') as f:
+            with self.meta_crops_hist_path.open(mode="a") as f:
                 for batch_idx, batch in enumerate(self.meta_crops_hist_buffer):
                     for crop_meta in batch:
                         f.write(f"\n{batch_idx},{crop_meta.to_csv_line()}")
@@ -1629,18 +1710,15 @@ class VolumeCropSequence(Sequence):
                 self.batch_size,
                 self.crop_shape[0],
                 self.crop_shape[1],
-                1  # mono-channel for now todo make it multichannel
+                1,  # mono-channel for now todo make it multichannel
             )
             target_y_shape = tuple(
-                [
-                    self.batch_size,
-                    self.crop_shape[0],
-                    self.crop_shape[1],
-                ] + self.use_labels_ohe * [n_classes]
+                [self.batch_size, self.crop_shape[0], self.crop_shape[1],]
+                + self.use_labels_ohe * [n_classes]
             )
 
         elif self.output_as_2halfd:
-            
+
             target_x_shape = (
                 self.batch_size,
                 self.crop_shape[0],
@@ -1650,11 +1728,8 @@ class VolumeCropSequence(Sequence):
                 # todo make it *actually* multichannel
             )
             target_y_shape = tuple(
-                [
-                    self.batch_size,
-                    self.crop_shape[0],
-                    self.crop_shape[1],
-                ] + self.use_labels_ohe * [n_classes]
+                [self.batch_size, self.crop_shape[0], self.crop_shape[1],]
+                + self.use_labels_ohe * [n_classes]
             )
 
         else:  # 3d might it be (:
@@ -1671,7 +1746,8 @@ class VolumeCropSequence(Sequence):
                     self.crop_shape[0],
                     self.crop_shape[1],
                     self.crop_shape[2],
-                ] + self.use_labels_ohe * [n_classes]
+                ]
+                + self.use_labels_ohe * [n_classes]
             )
 
         X = np.empty(target_x_shape, dtype=np.float)
@@ -1685,17 +1761,20 @@ class VolumeCropSequence(Sequence):
             # make it 2d if that's the case
             if self.output_as_2d:
                 data_crop, labels_crop = (
-                    (data_crop[:, :, 0], labels_crop[:, :, 0]) if meta_crop.is2d_on(2) else
-                    (data_crop[:, 0, :], labels_crop[:, 0, :]) if meta_crop.is2d_on(1) else
-                    (data_crop[0, :, :], labels_crop[0, :, :]) if meta_crop.is2d_on(0) else
-                    (data_crop, labels_crop)
+                    (data_crop[:, :, 0], labels_crop[:, :, 0])
+                    if meta_crop.is2d_on(2)
+                    else (data_crop[:, 0, :], labels_crop[:, 0, :])
+                    if meta_crop.is2d_on(1)
+                    else (data_crop[0, :, :], labels_crop[0, :, :])
+                    if meta_crop.is2d_on(0)
+                    else (data_crop, labels_crop)
                 )
                 data_crop_target_shape = tuple(list(data_crop.shape) + [1])
                 data_crop = data_crop.reshape(data_crop_target_shape)
-                
+
             elif self.output_as_2halfd:
                 labels_crop = labels_crop[:, :, self.target_layer_idx]
-                
+
             else:
                 pass
 
@@ -1713,8 +1792,8 @@ if __name__ == "__main__":
 
     n = 500
     random_probas = np.random.rand(n ** 3).reshape(n, n, n)
-    random_probas /= (random_probas.sum())
-    random_probas /= (random_probas.sum())
+    random_probas /= random_probas.sum()
+    random_probas /= random_probas.sum()
     gpg = VoxelwiseProbabilityGridPotion(
         x_range=(0, n),
         y_range=(0, n),

@@ -1,4 +1,3 @@
 # todo use full path and not relative...
 module load anaconda/conda3.7
 conda activate tomo2seg-dev
-

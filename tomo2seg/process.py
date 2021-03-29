@@ -4,23 +4,22 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import reduce
 from operator import mul
-from typing import Type, Optional, Tuple
+from typing import Optional, Tuple, Type
 
 import numpy as np
+from tomo2seg.logger import dict2str, logger
 
-from tomo2seg.logger import logger, dict2str
 
-
-def get_largest_crop_multiple(volume_shape: Tuple[int, int, int], multiple_of: int) -> Tuple[int, int, int]:
+def get_largest_crop_multiple(
+    volume_shape: Tuple[int, int, int], multiple_of: int
+) -> Tuple[int, int, int]:
     # noinspection PyTypeChecker
-    return tuple(
-        int(multiple_of * np.floor(dim / multiple_of))
-        for dim in volume_shape
-    )
+    return tuple(int(multiple_of * np.floor(dim / multiple_of)) for dim in volume_shape)
 
 
-def reduce_dimensions(shape: Tuple[int, int, int], max_nvoxels: int, multiple_of: int) -> Tuple[int, int, int]:
-
+def reduce_dimensions(
+    shape: Tuple[int, int, int], max_nvoxels: int, multiple_of: int
+) -> Tuple[int, int, int]:
     class FoundDivisibleDim(Exception):
         pass
 
@@ -43,7 +42,9 @@ def reduce_dimensions(shape: Tuple[int, int, int], max_nvoxels: int, multiple_of
             continue
 
         else:
-            raise ValueError(f"Could not find a suitable shape from {original_shape=} {multiple_of=} {max_nvoxels=}. Smallest size found was {shape=} {nvoxels=}")
+            raise ValueError(
+                f"Could not find a suitable shape from {original_shape=} {multiple_of=} {max_nvoxels=}. Smallest size found was {shape=} {nvoxels=}"
+            )
 
     # noinspection PyTypeChecker
     return tuple(shape)

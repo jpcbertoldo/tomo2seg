@@ -2,7 +2,6 @@ import json
 from typing import Optional
 
 import requests
-
 from tomo2seg.logger import logger
 
 # should contain the webhook_url
@@ -22,7 +21,9 @@ def default_url():
             slack_json = json.load(f)
 
     except FileNotFoundError:
-        logger.exception(f"Please create a json at {SLACK_JSON} with the key `webhook_url`.")
+        logger.exception(
+            f"Please create a json at {SLACK_JSON} with the key `webhook_url`."
+        )
         raise SlackJsonError("FileNotFound")
 
     try:

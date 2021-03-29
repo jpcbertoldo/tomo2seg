@@ -1,10 +1,10 @@
+import pathlib
 import time
 import warnings
-from datetime import datetime
 from dataclasses import dataclass, field
-import pathlib
+from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional, ClassVar
+from typing import ClassVar, Dict, List, Optional, Tuple
 
 import yaml
 from numpy import ndarray
@@ -12,7 +12,6 @@ from yaml import YAMLObject
 
 from . import utils
 from .logger import logger
-
 
 here = pathlib.Path(__file__).parent.resolve().absolute()
 root_dir = (here / "..").resolve()
@@ -39,7 +38,9 @@ class SetPartition(YAMLObject):
     yaml_tag = "!SetPartition"
 
     @classmethod
-    def z_partitioned_only(cls, x_size: int, y_size: int, z_min: int, z_max: int, alias=None) -> "SetPartition":
+    def z_partitioned_only(
+        cls, x_size: int, y_size: int, z_min: int, z_max: int, alias=None
+    ) -> "SetPartition":
         return cls((0, x_size), (0, y_size), (z_min, z_max), alias=alias)
 
     @classmethod
@@ -53,16 +54,16 @@ class SetPartition(YAMLObject):
     def get_volume_partition(self, volume: ndarray) -> ndarray:
         if volume.ndim == 3:
             return volume[
-                self.x_range[0]:self.x_range[1],
-                self.y_range[0]:self.y_range[1],
-                self.z_range[0]:self.z_range[1],
+                self.x_range[0] : self.x_range[1],
+                self.y_range[0] : self.y_range[1],
+                self.z_range[0] : self.z_range[1],
             ]
         elif volume.ndim == 4:
             return volume[
-               self.x_range[0]:self.x_range[1],
-               self.y_range[0]:self.y_range[1],
-               self.z_range[0]:self.z_range[1],
-               :
+                self.x_range[0] : self.x_range[1],
+                self.y_range[0] : self.y_range[1],
+                self.z_range[0] : self.z_range[1],
+                :,
             ]
         else:
             raise ValueError(f"{volume.ndim=}")
@@ -87,8 +88,10 @@ class Volume:
     def xy_reduced(self, new_width: int, new_height: int, alias=None) -> SetPartition:
         alias = alias if alias is not None else f"xy_reduced({new_width}, {new_height})"
         return SetPartition(
-            (0, new_width), (0, new_height), (0, self._metadata.dimensions[2]),
-            alias=alias
+            (0, new_width),
+            (0, new_height),
+            (0, self._metadata.dimensions[2]),
+            alias=alias,
         )
 
     @dataclass
@@ -118,10 +121,7 @@ class Volume:
 
     @property
     def fullname(self) -> str:
-        return Volume.name_pieces2fullname(
-            name=self.name,
-            version=self.version,
-        )
+        return Volume.name_pieces2fullname(name=self.name, version=self.version,)
 
     @property
     def dir(self) -> Path:
@@ -155,11 +155,21 @@ class Volume:
             labels_volume_path = self.labels_path
         return str(labels_volume_path)[:-4]
 
-    def blobs3d_volume_path(self, class_idx: int, labels_version: Optional[str] = None) -> Path:
-        return self.dir / f"{self._blobs_path_prefix(labels_version)}.blobs3d.class_idx={class_idx}.raw"
+    def blobs3d_volume_path(
+        self, class_idx: int, labels_version: Optional[str] = None
+    ) -> Path:
+        return (
+            self.dir
+            / f"{self._blobs_path_prefix(labels_version)}.blobs3d.class_idx={class_idx}.raw"
+        )
 
-    def blobs3d_props_path(self, class_idx: int, labels_version: Optional[str] = None) -> Path:
-        return self.dir / f"{self._blobs_path_prefix(labels_version)}.blobs3d.props.class_idx={class_idx}.csv"
+    def blobs3d_props_path(
+        self, class_idx: int, labels_version: Optional[str] = None
+    ) -> Path:
+        return (
+            self.dir
+            / f"{self._blobs_path_prefix(labels_version)}.blobs3d.props.class_idx={class_idx}.csv"
+        )
 
     @property
     def weights_path(self) -> Path:
@@ -196,7 +206,10 @@ class Volume:
 
     @property
     def set_partitions(self) -> Dict[str, dict]:
-        warnings.warn(f"{self.__class__.__name__}.set_partitions is deprecated, please use __get_item__.", DeprecationWarning)
+        warnings.warn(
+            f"{self.__class__.__name__}.set_partitions is deprecated, please use __get_item__.",
+            DeprecationWarning,
+        )
         return self.metadata.set_partitions
 
     def __getitem__(self, partition_alias) -> SetPartition:
@@ -208,7 +221,9 @@ class Volume:
             if ex.args[0] != partition_alias:
                 raise ex
 
-            raise KeyError(f"{partition_alias=} not available. Pick one from {list(self.metadata.set_partitions.keys())}")
+            raise KeyError(
+                f"{partition_alias=} not available. Pick one from {list(self.metadata.set_partitions.keys())}"
+            )
 
         except TypeError as ex:
 
@@ -251,8 +266,7 @@ class Volume:
         ]
 
         # these are not essential but important
-        warning_paths: List[Path] = [
-        ]
+        warning_paths: List[Path] = []
 
         for p in error_paths:
             if not p.exists():
@@ -265,25 +279,32 @@ class Volume:
         if vol.set_partitions is not None:
 
             for key in [
-                cls.Metadata.TRAIN_PARTITION_KEY, cls.Metadata.VAL_PARTITION_KEY, cls.Metadata.TEST_PARTITION_KEY
+                cls.Metadata.TRAIN_PARTITION_KEY,
+                cls.Metadata.VAL_PARTITION_KEY,
+                cls.Metadata.TEST_PARTITION_KEY,
             ]:
                 if key not in vol.set_partitions:
                     logger.warning(f"Missing set partition: {key=}")
 
         return vol
 
-    def grid_position_probabilities_path(self, partition: SetPartition, crop_shape: Tuple[int, int, int], version: str) -> Path:
-        return self.dir / f"{self.fullname}.grid-position-probabilities.partition={partition.alias}.crop-shape={crop_shape}.version={version}.npy"
+    def grid_position_probabilities_path(
+        self, partition: SetPartition, crop_shape: Tuple[int, int, int], version: str
+    ) -> Path:
+        return (
+            self.dir
+            / f"{self.fullname}.grid-position-probabilities.partition={partition.alias}.crop-shape={crop_shape}.version={version}.npy"
+        )
 
     @classmethod
     def from_fullname(cls, volume_fullname: str):
         name, version = volume_fullname.split(".")
         return cls(name=name, version=version)
-    
+
     @property
     def nclasses(self) -> int:
         return len(self.metadata.labels)
-    
+
     @property
     def normalization_factor(self) -> int:
         return NORMALIZE_FACTORS[self.metadata.dtype]
@@ -304,8 +325,10 @@ class EstimationVolume(YAMLObject):
 
     @property
     def fullname(self) -> str:
-        partition_name = self.WHOLE_VOLUME_ALIAS if self.partition is None else (
-            self.partition.alias or self.partition.canonical_alias
+        partition_name = (
+            self.WHOLE_VOLUME_ALIAS
+            if self.partition is None
+            else (self.partition.alias or self.partition.canonical_alias)
         )
         runid = utils.fmt_runid(self.runid)
         return f"vol={self.volume_fullname}.set={partition_name}.model={self.model_name}.runid={runid}"
@@ -334,7 +357,7 @@ class EstimationVolume(YAMLObject):
 
     @property
     def debug__crops_coordinates_path(self) -> Path:
-        return self.dir / f'{self.fullname}.debug.crops-coordinates.npy'
+        return self.dir / f"{self.fullname}.debug.crops-coordinates.npy"
 
     @property
     def debug__crops_path(self) -> Path:
@@ -362,7 +385,7 @@ class EstimationVolume(YAMLObject):
     @property
     def presoftmax_voxel_embeddings_path(self) -> Path:
         return self.dir / f"{self.fullname}.presoftmax-voxel-embeddings.npy"
-    
+
     @property
     def voxelwise_classification_report_human(self) -> Path:
         return self.dir / f"{self.fullname}.voxelwise-classification-report.human.yaml"
@@ -370,11 +393,11 @@ class EstimationVolume(YAMLObject):
     @property
     def voxelwise_classification_report_exact(self) -> Path:
         return self.dir / f"{self.fullname}.voxelwise-classification-report.exact.yaml"
-    
+
     @property
     def notable_slices_path(self) -> Path:
         return self.dir / f"{self.fullname}.notable-slices.yaml"
-    
+
     @property
     def notable_slices_plots(self) -> Path:
         return self.dir / f"notable-slices-plots"
@@ -385,11 +408,15 @@ class EstimationVolume(YAMLObject):
 
     @property
     def classification_report_table_human_simple_txt_path(self) -> Path:
-        return self.dir / f"{self.fullname}.classification-report-table.human.simple.txt"
+        return (
+            self.dir / f"{self.fullname}.classification-report-table.human.simple.txt"
+        )
 
     @property
     def classification_report_table_human_detail_txt_path(self) -> Path:
-        return self.dir / f"{self.fullname}.classification-report-table.human.detail.txt"
+        return (
+            self.dir / f"{self.fullname}.classification-report-table.human.detail.txt"
+        )
 
     def get_class_roc_curve_path(self, class_idx: int) -> Path:
         return self.dir / f"{self.fullname}.roc-curve.class-idx={class_idx}.raw"
@@ -408,18 +435,18 @@ class EstimationVolume(YAMLObject):
     @property
     def probabilities_histograms_path(self) -> Path:
         return self.dir / f"{self.fullname}.probabilities-histograms.npy"
-    
+
     @property
     def voxel_normalized_entropy_path(self) -> Path:
         return self.dir / f"{self.fullname}.voxel-normalized-entropy.raw"
-    
+
     @property
     def voxel_normalized_entropy_histograms_path(self) -> Path:
         return self.dir / f"{self.fullname}.voxel-normalized-entropy-histograms.npy"
-    
+
     def get_confusion_volume_path(self, class_idx) -> Path:
         return self.dir / f"{self.fullname}.confusion-volume.class-idx={class_idx}.raw"
-    
+
     @property
     def confusion_volume_path(self) -> Path:
         return self.dir / f"{self.fullname}.confusion-volume.raw"
@@ -431,11 +458,11 @@ class EstimationVolume(YAMLObject):
     @property
     def error_2dblobs_props_path(self) -> Path:
         return self.dir / f"{self.fullname}.error-2dblobs-props.csv"
-    
+
     @property
     def exec_log_path(self) -> Path:
         return self.dir / f"{self.fullname}.exec.log"
-    
+
     @property
     def exec_log_path_str(self) -> str:
         return str(self.exec_log_path)
@@ -443,14 +470,20 @@ class EstimationVolume(YAMLObject):
     @property
     def analyse_exec_log_path(self) -> Path:
         return self.dir / f"{self.fullname}.analyse-exec.log"
-    
+
     @classmethod
-    def from_objects(cls, volume: Volume, model: "Model", set_partition: SetPartition = None, runid=None):
+    def from_objects(
+        cls,
+        volume: Volume,
+        model: "Model",
+        set_partition: SetPartition = None,
+        runid=None,
+    ):
         return cls(
             volume_fullname=volume.fullname,
             model_name=model.name,
             partition=set_partition,
-            runid=runid
+            runid=runid,
         )
 
     @classmethod
@@ -458,32 +491,40 @@ class EstimationVolume(YAMLObject):
         from .model import Model
 
         try:
-            vol_name, vol_version, partition_name, model_master_name, model_version, model_fold, model_runid, runid = full_name.split(".")
-            
+            (
+                vol_name,
+                vol_version,
+                partition_name,
+                model_master_name,
+                model_version,
+                model_fold,
+                model_runid,
+                runid,
+            ) = full_name.split(".")
+
         except ValueError as ex:
-            
+
             logger.exception(ex)
-            
+
             if "not enough values to unpack" not in ex.args[0]:
                 raise ex
-            
+
             raise ValueError(f"not an estimation volume {full_name=}")
-            
+
         vol_name = vol_name.split("=")[1]
         partition_name = partition_name.split("=")[1]
         model_master_name = model_master_name.split("=")[1]
         runid = runid.split("=")[1]
 
         volume_fullname = Volume.name_pieces2fullname(
-            name=vol_name,
-            version=vol_version,
+            name=vol_name, version=vol_version,
         )
 
         model_name = Model.name_pieces2name(
             master_name=model_master_name,
             version=model_version,
             fold_str=model_fold,
-            runid_str=model_runid
+            runid_str=model_runid,
         )
 
         assert partition_name in (
@@ -502,11 +543,13 @@ class EstimationVolume(YAMLObject):
             logger.info("Creating volume object to get partition dimensions.")
 
             volume = Volume.from_fullname(volume_fullname)
-            partition = SetPartition.from_dict(volume.set_partitions.get(partition_name))
+            partition = SetPartition.from_dict(
+                volume.set_partitions.get(partition_name)
+            )
 
         return cls(
             volume_fullname=volume_fullname,
             model_name=model_name,
             runid=runid,
-            partition=partition
+            partition=partition,
         )

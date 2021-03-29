@@ -1,14 +1,14 @@
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import pandas
-from dataclasses import dataclass
+from matplotlib import pyplot as plt
+from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import History as KerasHistory
 from tensorflow.keras.optimizers import Optimizer
-from tensorflow.keras import backend as K
 from tensorflow.python.keras.callbacks import Callback
-from matplotlib import pyplot as plt
 
 from . import viz
 from .logger import logger
@@ -16,7 +16,6 @@ from .volume_sequence import VolumeCropSequence
 
 
 class History(KerasHistory):
-
     def __init__(
         self,
         crop_seq_train: VolumeCropSequence,
@@ -35,25 +34,28 @@ class History(KerasHistory):
 
         if backup is not None:
             assert backup > 0
-            assert csv_path is not None, "If you want to backup you better tell me where."
+            assert (
+                csv_path is not None
+            ), "If you want to backup you better tell me where."
             csv_path.touch()
 
         self.backup = backup
         self.csv_path = csv_path
-        
+
         self.optimizer = optimizer
         self.crop_seq_train = crop_seq_train
         self.crop_seq_val = crop_seq_val
-        
+
         self.last_log_timestamp = None
-        
+
         if self.csv_path is not None:
             logger.info(f"Loading history from csv {self.csv_path=}.")
             try:
                 history_df = pandas.read_csv(self.csv_path)
                 self.history = history_df.to_dict(orient="list")
-                
+
                 from ast import literal_eval
+
                 self.history["train.crop_shape"] = [
                     literal_eval(x) if isinstance(x, str) else x
                     for x in self.history["train.crop_shape"]
@@ -107,7 +109,9 @@ class History(KerasHistory):
 
         if self.backup is not None and (epoch % self.backup == self.backup - 1):
             # todo make this more efficient instead of recreating the whole thing every time
-            logger.info(f"Saving backup of the training history {epoch=} {self.csv_path=}")
+            logger.info(
+                f"Saving backup of the training history {epoch=} {self.csv_path=}"
+            )
             self.dataframe.to_csv(self.csv_path)
 
     @property
@@ -133,38 +137,33 @@ class HistoryPlot(Callback):
                 nrows := 2,
                 ncols := 1,
                 figsize=(2.5 * ncols * (sz := 5), nrows * sz),
-                dpi=100
+                dpi=100,
             )
             fig.set_tight_layout(True)
 
             hist_display = viz.TrainingHistoryDisplay(
                 self.history_callback.history,
-                x_axis_mode=(
-                    "epoch",
-                    "batch",
-                    "crop",
-                    "voxel",
-                    "time",
-                ),
-            ).plot(
-                axs,
-                with_lr=True,
-                metrics=("loss", ),
-            )
+                x_axis_mode=("epoch", "batch", "crop", "voxel", "time",),
+            ).plot(axs, with_lr=True, metrics=("loss",),)
 
             axs[0].set_yscale("log")
             axs[-1].set_yscale("log")
 
-            viz.mark_min_values(hist_display.axs_metrics_[0], hist_display.plots_["loss"][0])
-            viz.mark_min_values(hist_display.axs_metrics_[0], hist_display.plots_["val_loss"][0],
-                                txt_kwargs=dict(rotation=0))
+            viz.mark_min_values(
+                hist_display.axs_metrics_[0], hist_display.plots_["loss"][0]
+            )
+            viz.mark_min_values(
+                hist_display.axs_metrics_[0],
+                hist_display.plots_["val_loss"][0],
+                txt_kwargs=dict(rotation=0),
+            )
 
             hist_display.fig_.savefig(
-                self.save_path,
-                format='png',
+                self.save_path, format="png",
             )
             plt.close()
 
         except Exception as ex:
-            logger.exception(f"{ex.__class__.__name__} occurred while trying to plot the history.")
-
+            logger.exception(
+                f"{ex.__class__.__name__} occurred while trying to plot the history."
+            )

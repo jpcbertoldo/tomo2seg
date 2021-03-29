@@ -1,10 +1,10 @@
-from IPython.core.magic import register_cell_magic
 import socket
 
+from IPython.core.magic import register_cell_magic
 from tomo2seg.slack import notify_exception
 
 
-@register_cell_magic('slack_exception_notification')
+@register_cell_magic("slack_exception_notification")
 def slack_exception_notification(line, cell):
 
     try:

@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 from tabulate import tabulate
-
 from tomo2seg import losses as tomo2seg_losses
 from tomo2seg.logger import logger
 
@@ -47,7 +46,7 @@ class TheoreticalModel(ABC):
     @property
     def jaccard2_classwise_losses(self) -> List[float]:
         f"""
-        :return: {tomo2seg_losses.Jaccard2.__module__}.{tomo2seg_losses.Jaccard2.__name__}(i) for i in [0, ..., n_classes - 1] 
+        :return: {tomo2seg_losses.Jaccard2.__module__}.{tomo2seg_losses.Jaccard2.__name__}(i) for i in [0, ..., n_classes - 1]
         """
 
         if self.jaccard2_classwise_coeffs is None:
@@ -106,7 +105,7 @@ class TheoreticalModel(ABC):
 @dataclass
 class UniformProbabilitiesClassifier(TheoreticalModel):
     f"""
-    :attr proportions: the proportions of each class 
+    :attr proportions: the proportions of each class
     """
 
     proportions: List[float]
@@ -123,7 +122,7 @@ class UniformProbabilitiesClassifier(TheoreticalModel):
         # pred = n_classes * proba**2  # * n  = proba
         # jaccard2 = intersection / (true + pred - intersection)
         # jaccard2 = proba / (1 + proba - proba) = proba = 1/n_classes
-        return 1. / self.n_classes
+        return 1.0 / self.n_classes
 
     @property
     def jaccard2_classwise_coeffs(self) -> List[float]:
@@ -132,7 +131,7 @@ class UniformProbabilitiesClassifier(TheoreticalModel):
             assert 0 < p < 1, f"{idx=} {p=}"
         assert (should_be_1 := sum(proportions)) == 1, f"{should_be_1=}"
 
-        return [1. / ((self.n_classes ** 2) + (1 / pi) - 1) for pi in proportions]
+        return [1.0 / ((self.n_classes ** 2) + (1 / pi) - 1) for pi in proportions]
 
     @property
     def jaccard_raveled_coeff(self) -> float:
@@ -198,11 +197,19 @@ class BinwiseOrder0Classifier(TheoreticalModel):
         assert (shape_1 := self.classwise_histograms.shape[1]) == 256, f"{shape_1=}"
 
         self.class_proportions_ = self.classwise_histograms.sum(axis=1)
-        self.class_proportions_ = self.class_proportions_ / self.class_proportions_.sum()
+        self.class_proportions_ = (
+            self.class_proportions_ / self.class_proportions_.sum()
+        )
 
-        self.binwise_class_proportions_ = self.classwise_histograms / self.classwise_histograms.sum(axis=0, keepdims=True)
+        self.binwise_class_proportions_ = (
+            self.classwise_histograms
+            / self.classwise_histograms.sum(axis=0, keepdims=True)
+        )
 
-        self.binwise_class_proportions_ = self.binwise_class_proportions_ / self.binwise_class_proportions_.sum(axis=0, keepdims=True)
+        self.binwise_class_proportions_ = (
+            self.binwise_class_proportions_
+            / self.binwise_class_proportions_.sum(axis=0, keepdims=True)
+        )
 
         assert np.all(np.isclose(self.binwise_class_proportions_.sum(axis=0), 1))
 
@@ -212,14 +219,18 @@ class BinwiseOrder0Classifier(TheoreticalModel):
         self.norm_histogram_ = self.norm_histogram_ / self.norm_histogram_.sum(axis=0)
         self.norm_histogram_ = self.norm_histogram_ / self.norm_histogram_.sum(axis=0)
 
-        self.normalized_classwise_histograms_ = self.classwise_histograms / self.classwise_histograms.sum()
+        self.normalized_classwise_histograms_ = (
+            self.classwise_histograms / self.classwise_histograms.sum()
+        )
 
     @property
     def jaccard2_raveled_coeff(self) -> float:
-        intersec = np.sum([
-            self.normalized_classwise_histograms_[self.decisions_map_[val], val]
-            for val in range(256)
-        ])
+        intersec = np.sum(
+            [
+                self.normalized_classwise_histograms_[self.decisions_map_[val], val]
+                for val in range(256)
+            ]
+        )
         return intersec / (2 - intersec)
 
     @property
@@ -229,21 +240,23 @@ class BinwiseOrder0Classifier(TheoreticalModel):
 
         for k in range(self.n_classes_):
 
-            intersec = np.sum([
-                self.normalized_classwise_histograms_[k, val]
-                if self.decisions_map_[val] == k else
-                0
-                for val in range(256)
-            ])
+            intersec = np.sum(
+                [
+                    self.normalized_classwise_histograms_[k, val]
+                    if self.decisions_map_[val] == k
+                    else 0
+                    for val in range(256)
+                ]
+            )
 
             gt = self.class_proportions_[k]
 
-            pred = np.sum([
-                self.norm_histogram_[val]
-                if self.decisions_map_[val] == k else
-                0
-                for val in range(256)
-            ])
+            pred = np.sum(
+                [
+                    self.norm_histogram_[val] if self.decisions_map_[val] == k else 0
+                    for val in range(256)
+                ]
+            )
 
             coeffs.append(intersec / (gt + pred - intersec))
 
@@ -266,9 +279,9 @@ def main():
 
     # todo update these with the correct values
     pa66gf30_proportions = [
-        .809861,  # matrix
-        .189801,  # fiber
-        .000338,  # porosity
+        0.809861,  # matrix
+        0.189801,  # fiber
+        0.000338,  # porosity
     ]
 
     pa66gf30_classwise_histograms = np.load(
@@ -277,8 +290,7 @@ def main():
 
     pa66gf30_models = [
         UniformProbabilitiesClassifier(
-            name="pa66gf30",
-            proportions=pa66gf30_proportions
+            name="pa66gf30", proportions=pa66gf30_proportions
         ),
         Order0Classifier(
             name="pa66gf30",
@@ -286,8 +298,7 @@ def main():
             p0=pa66gf30_proportions[0],
         ),
         BinwiseOrder0Classifier(
-            name="pa66gf30",
-            classwise_histograms=pa66gf30_classwise_histograms,
+            name="pa66gf30", classwise_histograms=pa66gf30_classwise_histograms,
         ),
     ]
 
@@ -312,8 +323,6 @@ def main():
 
     logger.debug(f"{global_losses=} {classwise_losses=}")
     logger.info(f"{losses=}")
-
-
 
     # ===================================================== coeffs =====================================================
 
@@ -360,11 +369,15 @@ def main():
                 for attr in ["fullname"]
             },
             **{
-                attr.split("_loss")[0]: [get_value(model, attr, False) for model in models]
+                attr.split("_loss")[0]: [
+                    get_value(model, attr, False) for model in models
+                ]
                 for attr in global_losses
             },
             **{
-                attr.split("_losses")[0]: [get_value(model, attr, True) for model in models]
+                attr.split("_losses")[0]: [
+                    get_value(model, attr, True) for model in models
+                ]
                 for attr in classwise_losses
             },
         }
@@ -377,11 +390,15 @@ def main():
                 for attr in ["fullname"]
             },
             **{
-                attr.split("_coeff")[0]: [get_value(model, attr, False) for model in models]
+                attr.split("_coeff")[0]: [
+                    get_value(model, attr, False) for model in models
+                ]
                 for attr in global_coeffs
             },
             **{
-                attr.split("_coeffs")[0]: [get_value(model, attr, True) for model in models]
+                attr.split("_coeffs")[0]: [
+                    get_value(model, attr, True) for model in models
+                ]
                 for attr in classwise_coeffs
             },
         }

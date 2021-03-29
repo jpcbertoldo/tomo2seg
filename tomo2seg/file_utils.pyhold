@@ -5,14 +5,14 @@ import struct
 
 def read_image_sequence(data_dir, prefix, num_images, start_index=0, image_format='png', zero_padding=0, crop=None, verbose=False):
     '''Read a series of images into a list of numpy arrays.
-    
+
     :param str data_dir: directory where the image files are located.
     :param str prefix: a string to construct the image file names.
     :param int num_images: the number of images to read.
     :param int start_index: the index to start loading the images (0 by default).
     :param str image_format: can be tif or png (png by default).
     :param int zero_padding: number of zero to use in zero padding (0 by default).
-    :param list crop: bounds to crop the images (None by default) 
+    :param list crop: bounds to crop the images (None by default)
     :param bool verbose: activate verbose mode (False by default).
     :return: the list of the images read from the disk.
     '''
@@ -223,12 +223,12 @@ def edf_write(data, file_name, header_size=1024):
 
 def HST_info(info_file):
     """Read the given info file and returns a dictionary containing the data size and type.
-    
+
     .. note::
-    
-       The first line of the file must begin by ! PyHST or directly by NUM_X. 
+
+       The first line of the file must begin by ! PyHST or directly by NUM_X.
        Also note that if the data type is not specified, it will not be present in the dictionary.
-    
+
     :param str info_file: path to the ascii file to read.
     :return: a dictionary with the values for x_dim, y_dim, z_dim and data_type if needed.
     """
@@ -349,10 +349,10 @@ def rawmar_read(image_name, size, verbose=False):
 def HST_write(data, file_name, mode='w', verbose=True, pack_binary=False):
     '''Write data as a raw binary file.
 
-    This function write a (x,y,z) 3D dataset to the disk. The actual data type is used, you can convert your data array 
-    on the fly using data.astype if you want to change the type. 
+    This function write a (x,y,z) 3D dataset to the disk. The actual data type is used, you can convert your data array
+    on the fly using data.astype if you want to change the type.
     The file is written as a Z-stack. It means that the first nx*ny bytes written represent the first slice and so on...
-    For binary data files (stored in memory as integer or bool data type), binary packing mode can be activated which 
+    For binary data files (stored in memory as integer or bool data type), binary packing mode can be activated which
     stores 8 values on each byte (saving 7/8 of the disk space).
 
     A .info file containing the volume size and data type is also written.

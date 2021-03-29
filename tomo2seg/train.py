@@ -2,12 +2,11 @@ import time
 from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, ClassVar, Type
+from typing import ClassVar, Optional, Type
 
 import tensorflow as tf
-
-from tomo2seg.logger import logger
 from tomo2seg.args import BaseArgs
+from tomo2seg.logger import logger
 from tomo2seg.model import Model as T2SModel
 
 
@@ -44,11 +43,11 @@ class Args(BaseArgs):
 
     partition_train: str = "train"
     partition_val: str = "val"
-        
+
     early_stop_mode: EarlyStopMode = EarlyStopMode.no_early_stop
     batch_size_mode: BatchSizeMode = BatchSizeMode.try_max_and_reduce
     train_mode: TrainMode = TrainMode.from_scratch
-        
+
     model_fold: int = 0
 
     # override the auto-sized value
@@ -60,12 +59,14 @@ class Args(BaseArgs):
         super().__post_init__()
 
         if self.train_mode.is_continuation:
-            assert self.runid is not None, f"Incompatible args {self.runid=} {self.self.train_mode=}"
+            assert (
+                self.runid is not None
+            ), f"Incompatible args {self.runid=} {self.self.train_mode=}"
 
         if self.batch_size_per_gpu is not None:
             assert self.batch_size_per_gpu > 0, f"{self.batch_size_per_gpu=}"
 
-            
+
 class TrainingFinished(Exception):
     pass
 

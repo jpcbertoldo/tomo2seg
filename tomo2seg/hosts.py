@@ -1,11 +1,9 @@
-from dataclasses import dataclass
 import socket
+from dataclasses import dataclass
 from typing import ClassVar
 
 import yaml
-
 from tomo2seg.logger import logger
-
 
 HOSTS_CONFIGS_YAML = "/home/users/jcasagrande/projects/tomo2seg/data/hosts.yml"
 
@@ -14,10 +12,10 @@ MAX_INTERNAL_NVOXELS = max(
     # seen cases
     # batch_size * internal_multiplier_factor * (crop_nvoxels) / gpu_factor
     # the gpu factor is the number of Gb of the gpu where I saw something happen
-    4 * (8 * 6) * (96**3) / 8,
-    8 * (16 * 6) * (320**2) / 8,
+    4 * (8 * 6) * (96 ** 3) / 8,
+    8 * (16 * 6) * (320 ** 2) / 8,
     3 * (16 * 6) * (800 * 928) / 8,
-    15 * 23 * (208**2 * 5) / 5,
+    15 * 23 * (208 ** 2 * 5) / 5,
 )
 
 
@@ -34,7 +32,6 @@ class HostsConfigsError(Exception):
 
 class UnknownHost(ValueError):
     pass
-
 
 
 def get_hosts():
@@ -72,15 +69,15 @@ hosts = get_hosts()
 
 
 def get_host(hostname: str = None) -> Host:
-    
+
     if hostname is None:
         hostname = socket.gethostname()
-    
-    assert isinstance(hostname, str) 
-    
+
+    assert isinstance(hostname, str)
+
     try:
         return hosts[hostname]
-    
+
     except KeyError:
         raise UnknownHost(hostname)
 
