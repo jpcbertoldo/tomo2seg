@@ -22,9 +22,11 @@ cd "${project_root}" || exit
 # list of things installed with pip after conda
 # - adabelief_tf
 # - pre-commit
+
+# !!!!!!!!!!!!!!!!!!!!!!!! i should install with conda
 # - ipython
 # - ipykernel
+# - nose
 
-# !!!!!!!!!!!!!!!!!!!!!!!! i should install `ipython ipykernel` as well
 
 # conda develop .
