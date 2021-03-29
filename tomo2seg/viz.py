@@ -1,6 +1,7 @@
 #
 import copy
 import time
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,6 +22,10 @@ from numpy import ndarray
 from sklearn.utils import check_matplotlib_support
 
 from .logger import logger
+
+
+warnings.warn("Use `display` if possible.", DeprecationWarning)
+
 
 FIGS_COMMON_METADATA = dict(
     Author="joaopcbertoldo",
