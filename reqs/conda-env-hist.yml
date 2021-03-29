@@ -1,15 +1,17 @@
-name: /home/users/jcasagrande/projects/tomo2seg/condaenv
+name: tomo2seg-dev
 channels:
   - defaults
 dependencies:
-  - tensorflow-gpu
-  - jupyterlab
-  - pyyaml
-  - humanize
+  - progressbar2
+  - seaborn
+  - scikit-learn
   - pandas
   - matplotlib
-  - seaborn
+  - humanize
+  - pyyaml
+  - tensorflow-gpu
+  - graphviz
   - imageio
   - pydot
-  - graphviz
-prefix: /home/users/jcasagrande/projects/tomo2seg/condaenv
+  - tqdm
+prefix: /home/joaopcbertoldo/anaconda3/envs/tomo2seg-dev
