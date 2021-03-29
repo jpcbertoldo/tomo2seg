@@ -1,0 +1,44 @@
+!Volume.Metadata
+dimensions:
+  - 731
+  - 301
+  - 200
+dtype: "uint16"
+labels:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+labels_names:
+  0: "exterior"
+  1: "inside"
+  2: "defect"
+  3: "porosity"
+  4: "crack"
+set_partitions:
+  train:
+    x_range: [0, 260]
+    y_range: [0, 301]
+    z_range: [0, 200]
+    alias: "train"
+  val:
+    x_range: [260, 450]
+    y_range: [0, 301]
+    z_range: [0, 200]
+    alias: "val"
+  test:
+    x_range: [450, 731]
+    y_range: [0, 301]
+    z_range: [0, 200]
+    alias: "test"
+  train2:
+    x_range: [0, 450]
+    y_range: [0, 301]
+    z_range: [0, 200]
+    alias: "train2"
+  val2:
+    x_range: [450, 731]
+    y_range: [0, 301]
+    z_range: [0, 200]
+    alias: "val2"

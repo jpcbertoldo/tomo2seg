@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from itertools import product
 from pathlib import Path
 from string import Template
 from typing import List, Optional, Union, Dict, Tuple, Iterable
@@ -18,7 +19,6 @@ import numpy as np
 from matplotlib.text import Text
 from numpy import ndarray
 from sklearn.utils import check_matplotlib_support
-from tomo2seg.callbacks import History
 
 from .logger import logger
 
@@ -309,7 +309,7 @@ class TrainingHistoryDisplay(Display):
                 x_tickss = []
                 for x_axis_ in self.x_axes_:
                     x_tickss.append(tick_locator.tick_values(vmin=min(x_axis_), vmax=max(x_axis_)))
-
+                    
                 ax.set_xticks(x_tickss[0])
                 x_tickss = [
                     [
@@ -585,6 +585,128 @@ class SliceDataPredictionDisplay(Display):
 
 
 @dataclass
+class OrthogonalSlicesPredictionDisplay(Display):
+
+    volume_data: ndarray
+    volume_prediction: ndarray
+    volume_name: str
+    n_classes: int
+    is_probability: bool = False
+    x: Optional[int] = None
+    y: Optional[int] = None
+    z: Optional[int] = None
+    xy_axes_: Axes = field(init=False)
+    yz_axes_: Axes = field(init=False)
+    xz_axes_: Axes = field(init=False)
+
+    def __post_init__(self):
+        assert self.volume_data.shape == self.volume_prediction.shape, f"{self.volume_data.shape=} {self.volume_prediction.shape=}"
+        (width, height, depth) = self.volume_data.shape
+        self.x, self.y, self.z = self.x or int(width // 2), self.y or int(height // 2), self.z or int(depth // 2)
+        assert 0 <= self.x < self.volume_data.shape[0], f"{self.x=} out of range {self.volume_data.shape[0]=})"
+        assert 0 <= self.y < self.volume_data.shape[1], f"{self.y=} out of range {self.volume_data.shape[1]=})"
+        assert 0 <= self.z < self.volume_data.shape[2], f"{self.z=} out of range {self.volume_data.shape[2]=})"
+
+    @property
+    def title(self) -> str:
+        return f"{self.volume_name}.orthogonal-slices-display.x={self.x}-y={self.y}-z={self.z}"
+
+    def plot(self, axs: ndarray = None, with_cuts=True, data_imshow_kwargs: dict = None, pred_imshow_kwargs: dict = None,
+             cut_lines_kwargs: dict = None) -> "OrthogonalSlicesDisplay":
+        
+        check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
+
+        # noinspection PyShadowingNames
+        import matplotlib.pyplot as plt
+
+        if axs is None:
+            fig, axs = plt.subplots(3, 2)
+        else:
+            fig: Figure = axs[0, 0].figure
+            assert isinstance(axs, ndarray)
+            assert axs.shape == (3, 2)
+            assert all(isinstance(obj, Axes) for obj in axs.ravel())
+
+        xy_axes: Axes = axs[0, :]
+        yz_axes: Axes = axs[1, :]
+        xz_axes: Axes = axs[2, :]
+
+        self.fig_ = fig
+        self.axs_ = axs
+        self.xy_axes_, self.yz_axes_, self.xz_axes_ = xy_axes, yz_axes, xz_axes
+
+        data_imshow_kwargs_ = {
+            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=1),
+            **(data_imshow_kwargs or {})
+        }  # override with user-given kwargs
+
+        slice_xy = self.volume_data[:, :, self.z].T
+        slice_yz = self.volume_data[self.x, :, :]
+        slice_xz = self.volume_data[:, self.y, :].T
+
+        # noinspection PyArgumentList
+        self.plots_["xy_slice_data"] = xy_axes[0].imshow(slice_xy, **data_imshow_kwargs_)
+        # noinspection PyArgumentList
+        self.plots_["yz_slice_data"] = yz_axes[0].imshow(slice_yz, **data_imshow_kwargs_)
+        # noinspection PyArgumentList
+        self.plots_["xz_slice_data"] = xz_axes[0].imshow(slice_xz, **data_imshow_kwargs_)
+
+        pred_imshow_kwargs = {
+            **dict(cmap=cm.gray, interpolation=None, vmin=0, vmax=(1 if self.is_probability else self.n_classes - 1)),
+            **(pred_imshow_kwargs or {})
+        }  # override with user-given kwargs
+
+        slice_xy_pred = self.volume_prediction[:, :, self.z].T
+        slice_yz_pred = self.volume_prediction[self.x, :, :]
+        slice_xz_pred = self.volume_prediction[:, self.y, :].T
+
+        # noinspection PyArgumentList
+        self.plots_["xy_slice_pred"] = xy_axes[1].imshow(slice_xy_pred, **pred_imshow_kwargs)
+        # noinspection PyArgumentList
+        self.plots_["yz_slice_pred"] = yz_axes[1].imshow(slice_yz_pred, **pred_imshow_kwargs)
+        # noinspection PyArgumentList
+        self.plots_["xz_slice_pred"] = xz_axes[1].imshow(slice_xz_pred, **pred_imshow_kwargs)
+
+        spines_specs_dict = dict(linewidth=4)
+
+        xy_axes[0].set_xlabel("x")
+        xy_axes[0].set_ylabel("y")
+        xy_axes[0].set_title(f"XY :: z={self.z}", fontdict=dict(color='g'))
+
+        yz_axes[0].set_xlabel("z")
+        yz_axes[0].set_ylabel("y")
+        yz_axes[0].set_title(f"YZ :: x={self.x}", fontdict=dict(color='r'))
+
+        xz_axes[0].set_xlabel("x")
+        xz_axes[0].set_ylabel("z")
+        xz_axes[0].set_title(f"XZ :: y={self.y}", fontdict=dict(color='b'))
+
+        if with_cuts:
+            axes_list = [xy_axes[0], yz_axes[0], xz_axes[0]]
+            lims = [(axis.get_xlim(), axis.get_ylim()) for axis in axes_list]
+            cut_lines_kwargs = {
+                **dict(linestyles="--", linewidth=4),
+                **(cut_lines_kwargs or {})
+            }
+            xy_axes[0].vlines(self.x, 0, slice_xy.shape[0], color='r', **cut_lines_kwargs)
+            xy_axes[0].hlines(self.y, 0, slice_xy.shape[1], color='b', **cut_lines_kwargs)
+            yz_axes[0].vlines(self.z, 0, slice_yz.shape[0], color='g', **cut_lines_kwargs)
+            yz_axes[0].hlines(self.y, 0, slice_yz.shape[1], color='b', **cut_lines_kwargs)
+            xz_axes[0].vlines(self.x, 0, slice_xz.shape[0], color='r', **cut_lines_kwargs)
+            xz_axes[0].hlines(self.z, 0, slice_xz.shape[1], color='g', **cut_lines_kwargs)
+            plt.setp(xy_axes[0].spines.values(), color="g", **spines_specs_dict)
+            plt.setp(yz_axes[0].spines.values(), color="r", **spines_specs_dict)
+            plt.setp(xz_axes[0].spines.values(), color="b", **spines_specs_dict)
+            for axis, lim in zip(axes_list, lims):
+                axis.set_xlim(lim[0])
+                axis.set_ylim(lim[1])
+
+        fig.suptitle(f"Orthogonal slices\nVolume: {self.volume_name}")
+
+        return self
+
+
+@dataclass
 class ClassImbalanceDisplay(Display):
 
     volume_name: str
@@ -602,7 +724,13 @@ class ClassImbalanceDisplay(Display):
     def title(self) -> str:
         return f"{self.volume_name}.class-imbalance"
 
-    def plot(self, ax=None) -> "Display":
+    def plot(
+        self, 
+        count_fmt_func, 
+        perc_fmt_func,
+        ax=None, 
+        barh_kwargs=dict(),
+    ) -> "Display":
 
         check_matplotlib_support(this_func_name := f"{(this_class_name := self.__class__.__name__)}.plot")
 
@@ -618,16 +746,24 @@ class ClassImbalanceDisplay(Display):
         self.axs_ = ax
         self.fig_ = fig
 
-        self.plots_["barh"] = ax.barh(self.labels_idx, self.labels_counts)
-        ax.set_yticks(self.labels_idx)
-        ax.set_yticklabels([f"{self.labels_names[idx]} ({idx=})" for idx in self.labels_idx])
+        self.plots_["barh"] = ax.barh(
+            self.labels_idx, 
+            self.labels_counts,
+            **barh_kwargs,
+        )
+        ax.set_yticks([])
         ax.set_xticks([])
+        
         for idx, count in zip(self.labels_idx, self.labels_counts):
+            
             self.plots_[f"text.label_idx={idx}"] = ax.text(
-                max(self.labels_counts) // 10, idx,
-                f"{humanize.intword(count)} "
-                f"({humanize.intcomma(count)}) = {(perc := count / self.n_voxels):.0%} ({perc:.4%})",
-                fontsize="large"
+                max(self.labels_counts) // 4, 
+                idx,
+                (
+                    f"{self.labels_names[idx]} ({idx=})\n"
+                    f"{count_fmt_func(count)} ({perc_fmt_func(count / self.n_voxels)})"
+                ),
+                fontsize="medium"
             )
 
         ax.set_title(f"Class imbalance of {self.volume_name}")
@@ -648,13 +784,14 @@ class VoxelValueHistogramDisplay(Display):
     ax_log_: Axes = field(init=False)
 
     def __post_init__(self):
+        assert isinstance(self.bins, list), f"{type(self.bins)}"
+        assert isinstance(self.values, list), f"{type(self.values)}"
         assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert len(self.values) == 256, f"{len(self.values)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)}"
 
         # i want to get the vertical borders to show up
-        self.bins += [256, 257]
+        self.bins += [self.bins[-1] + 1, self.bins[-1] + 2]
         self.values = [0] + self.values + [0]
 
     @property
@@ -674,9 +811,9 @@ class VoxelValueHistogramDisplay(Display):
         }
         # noinspection PyArgumentList
         self.plots_["y_linear"] = ax.step(self.bins, self.values, **y_linear_kwargs)
-        ax.set_xlim(-1, 257)
-        ax.set_xticks(np.linspace(0, 256, 256 // 8 + 1))  # multiples of 8
-        ax.set_xlabel("Voxel gray value [0, 255]")
+        ax.set_xlim(-1, self.bins[-1])
+        ax.set_xticks(list(map(int, np.linspace(0, self.bins[-3], 256 // 16 + 1))))  # multiples of 8
+        ax.set_xlabel(f"Voxel gray value [0, {self.bins[-3]}]")
 
         ax.set_ylim((0, 1.05 * max(self.values)))
         ax.set_ylabel("Proportion of voxels", color=y_linear_kwargs["color"], fontsize='large')
@@ -690,16 +827,22 @@ class VoxelValueHistogramDisplay(Display):
         self.plots_["y_log"] = axlog.step(self.bins, self.values, **y_log_kwargs)
         axlog.set_yscale("log")
         axlog.grid(axis='y', which='major', ls='--', color=y_log_kwargs["color"], alpha=.5)
+
+        log_tick_locator = plt.FixedLocator(np.logspace(-6, 0, 7))
+        axlog.yaxis.set_major_locator(log_tick_locator)
         axlog.set_yticklabels(
-            [f"10^{int(np.log10(t)):d}" for t in axlog.get_yticks()],
+            [f"{int(np.log10(t)):d}" for t in axlog.get_yticks()],
             c=y_log_kwargs["color"]
         )
+        axlog.set_ylim(1e-6, 1)
+
         axlog.set_ylabel(
-            "Proportion of voxels (log scale)",
+            "Proportion of voxels (log10 scale)",
             color=y_log_kwargs["color"],
             fontsize='large',
             rotation=-90,
-            rotation_mode="anchor"
+            rotation_mode="anchor",
+            labelpad=20,
         )
 
         ax.set_title(f"Volume data histogram\nvolume={self.volume_name}")
@@ -715,22 +858,22 @@ class VoxelValueHistogramPerClassDisplay(Display):
     values_per_label: List[list]
     values_per_label_global_proportion: List[list]
     labels_idx: List[int]
-    labels_names: List[str]
+    line_labels: List[str]
 
     ax_per_label_: Axes = field(init=False)
     ax_global_: Axes = field(init=False)
 
     def __post_init__(self):
+        assert isinstance(self.bins, list), f"{type(self.bins)}"
         assert len(self.bins) == 256, f"{len(self.bins)=}"
         assert min(self.bins) == 0, f"{min(self.bins)=}"
-        assert max(self.bins) == 255, f"{max(self.bins)}"
 
         for idx in self.labels_idx:
             assert (values_len := len(self.values_per_label[idx])) == 256, f"{values_len=} {idx=}"
             assert (values_len := len(self.values_per_label_global_proportion[idx])) == 256, f"{values_len=} {idx=}"
 
         # i want to get the vertical borders to show up
-        self.bins = copy.copy(self.bins) + [256, 257]
+        self.bins = copy.copy(self.bins) + [self.bins[-1] + 1, self.bins[-1] + 2]
         self.values_per_label = [
             [0] + copy.copy(self.values_per_label[idx]) + [0]
             for idx in self.labels_idx
@@ -754,28 +897,34 @@ class VoxelValueHistogramPerClassDisplay(Display):
         assert isinstance(ax_per_label, Axes), f"{ax_per_label=}"
         assert isinstance(ax_global, Axes), f"{ax_global=}"
 
-        for label_idx, label_name, label_hist, label_hist_global in zip(
-            self.labels_idx, self.labels_names, self.values_per_label, self.values_per_label_global_proportion
+        for label_idx, label_hist, label_hist_global in zip(
+            self.labels_idx, self.values_per_label, self.values_per_label_global_proportion
         ):
             self.plots_[f"per_label.{label_idx=}"] = ax_per_label.step(
                 self.bins,
                 label_hist,
                 linewidth=.75,
-                label=f"{label_name} ({label_idx=})",
+                label=self.line_labels[label_idx],
             )
-            ax_per_label.set_xlim(0, 256)
-            ax_per_label.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
-            ax_per_label.set_xlabel("Voxel gray value [0, 255]")
+
+            xlim = (0, self.bins[-3])
+            ax_per_label.set_xlim(*xlim)
+
+            xticks = np.linspace(0, self.bins[-3], 256 // 16 + 1)
+            ax_per_label.set_xticks(xticks)
+
+            xlabel = f"Voxel gray value [0, {self.bins[-3]}]"
+            ax_per_label.set_xlabel(xlabel)
 
             self.plots_[f"global.{label_idx=}"] = ax_global.step(
                 self.bins,
                 label_hist_global,
                 linewidth=.75,
-                label=f"{label_name} ({label_idx=})",
+                label=self.line_labels[label_idx],
             )
-            ax_global.set_xlim(0, 256)
-            ax_global.set_xticks(np.linspace(0, 256, 256 // 8 + 1))
-            ax_global.set_xlabel("Voxel gray value [0, 255]")
+            ax_global.set_xlim(*xlim)
+            ax_global.set_xticks(xticks)
+            ax_global.set_xlabel(xlabel)
 
         ax_per_label.set_ybound(lower=0)
         ax_per_label.set_ylabel("Proportion of voxels *per class*", fontsize='large')
@@ -783,11 +932,11 @@ class VoxelValueHistogramPerClassDisplay(Display):
         ax_per_label.set_title("Per class proportion\neach histogram is the proportion out of those of the same label")
 
         ax_global.set_yscale('log')
-        ax_global.set_ybound(lower=0)
         ax_global.set_ylabel("Proportion of voxels *overall* (global) [log]", fontsize='large')
         ax_global.legend()
         ax_global.set_title("Global proportion\neach histogram is the proportion out of all voxels")
         ax_global.grid(axis='y', which='major', ls='--', alpha=.5)
+        ax_global.set_ybound(lower=1e-6, upper=1)
 
         fig.suptitle(f"Volume data histogram per class\nvolume={self.volume_name}")
 
@@ -859,5 +1008,134 @@ class ClassProbabilityHistogramDisplay(Display):
         return self
 
 
-# @dataclass
-# class
+class ConfusionMatrixDisplay:
+    """Confusion Matrix visualization (copied from scikit-learn).
+
+    It is recommend to use :func:`~sklearn.metrics.plot_confusion_matrix` to
+    create a :class:`ConfusionMatrixDisplay`. All parameters are stored as
+    attributes.
+
+    Read more in the :ref:`User Guide <visualizations>`.
+
+    Parameters
+    ----------
+    confusion_matrix : ndarray of shape (n_classes, n_classes)
+        Confusion matrix.
+
+    display_labels : ndarray of shape (n_classes,), default=None
+        Display labels for plot. If None, display labels are set from 0 to
+        `n_classes - 1`.
+
+    Attributes
+    ----------
+    im_ : matplotlib AxesImage
+        Image representing the confusion matrix.
+
+    text_ : ndarray of shape (n_classes, n_classes), dtype=matplotlib Text, \
+            or None
+        Array of matplotlib axes. `None` if `include_values` is false.
+
+    ax_ : matplotlib Axes
+        Axes with confusion matrix.
+
+    figure_ : matplotlib Figure
+        Figure containing the confusion matrix.
+    """
+    def __init__(self, confusion_matrix, *, display_labels=None):
+        self.confusion_matrix = confusion_matrix
+        self.display_labels = display_labels
+
+    def plot(
+        self,
+        cmap='viridis',
+        xticks_rotation='horizontal',
+        values_format=None,
+        ax=None,
+        cmap_vmin=0,
+        cmap_vmax=1,
+    ):
+        """Plot visualization.
+
+        Parameters
+        ----------
+
+        cmap : str or matplotlib Colormap, default='viridis'
+            Colormap recognized by matplotlib.
+
+        xticks_rotation : {'vertical', 'horizontal'} or float, \
+                         default='horizontal'
+            Rotation of xtick labels.
+
+        values_format : str, default=None
+            Format specification for values in confusion matrix. If `None`,
+            the format specification is 'd' or '.2g' whichever is shorter.
+
+        ax : matplotlib axes, default=None
+            Axes object to plot on. If `None`, a new figure and axes is
+            created.
+
+        Returns
+        -------
+        display : :class:`~sklearn.metrics.ConfusionMatrixDisplay`
+        """
+        check_matplotlib_support("ConfusionMatrixDisplay.plot")
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+
+        cm = self.confusion_matrix
+        n_classes = cm.shape[0]
+        self.im_ = ax.imshow(
+            cm,
+            interpolation='nearest',
+            cmap=cmap,
+            vmin=cmap_vmin,
+            vmax=cmap_vmax,
+        )
+        self.text_ = None
+        cmap_min, cmap_max = self.im_.cmap(0), self.im_.cmap(256)
+
+        self.text_ = np.empty_like(cm, dtype=object)
+
+        # print text with appropriate color depending on background
+        thresh = (cm.max() + cm.min()) / 2.0
+
+        for i, j in product(range(n_classes), range(n_classes)):
+            color = cmap_max if cm[i, j] < thresh else cmap_min
+
+            if values_format is None:
+                text_cm = format(cm[i, j], '.2g')
+                if cm.dtype.kind != 'f':
+                    text_d = format(cm[i, j], 'd')
+                    if len(text_d) < len(text_cm):
+                        text_cm = text_d
+            else:
+                text_cm = format(cm[i, j], values_format)
+
+            self.text_[i, j] = ax.text(
+                j, i, text_cm,
+                ha="center", va="center",
+                color=color)
+
+        if self.display_labels is None:
+            display_labels = np.arange(n_classes)
+        else:
+            display_labels = self.display_labels
+
+        fig.colorbar(self.im_, ax=ax)
+        ax.set(xticks=np.arange(n_classes),
+               yticks=np.arange(n_classes),
+               xticklabels=display_labels,
+               yticklabels=display_labels,
+               ylabel="True label",
+               xlabel="Predicted label")
+
+        ax.set_ylim((n_classes - 0.5, -0.5))
+        plt.setp(ax.get_xticklabels(), rotation=xticks_rotation)
+
+        self.figure_ = fig
+        self.ax_ = ax
+        return self

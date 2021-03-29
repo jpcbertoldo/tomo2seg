@@ -1,0 +1,12 @@
+!unet2d/
+unet2d/*
+!unet2halfd/
+unet2halfd/*
+!unet3d/
+unet3d/*
+!unet2halfd-sep/
+unet2halfd-sep/*
+!unet2d-crack/
+unet2d-crack/*
+!unet2d-sep/
+unet2d-sep/*

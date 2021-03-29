@@ -81,6 +81,35 @@ class LogSpaceSchedule(Schedule):
 
 
 @dataclass
+class LinSpaceSchedule(Schedule):
+    """
+    """
+
+    wait: int
+    start: float
+    stop: float
+    n_between: int
+
+    schedule_: List[float] = field(init=False)
+
+    def __post_init__(self):
+        self.schedule_ = np.concatenate([
+            np.array(self.wait * [self.start]), 
+            np.linspace(self.start, self.stop, self.n_between + 2)
+        ]).tolist()
+        logger.info(f"{self.__class__.__name__} ==> {self.n=}")
+
+    @property
+    def n(self) -> int:
+        return len(self.schedule_)
+    
+    def __call__(self, epoch) -> float:
+        assert epoch >= self.offset_epoch, f"{epoch=} {self.offset_epoch=}"
+        epoch -= self.offset_epoch
+        return self.schedule_[epoch] if epoch < len(self.schedule_) else self.schedule_[-1]
+
+    
+@dataclass
 class ComposedSchedule(Schedule):
 
     sub_schedules: List[Schedule]
@@ -117,3 +146,21 @@ class ComposedSchedule(Schedule):
             return self.sub_schedules[-1](epoch)
 
         return self.sub_schedules[self.epoch_mapping_[epoch]](epoch)
+    
+
+def get_schedule00():
+    """
+    teeth log lr schedule
+    """
+    return ComposedSchedule(
+        offset_epoch=0,
+        sub_schedules=[
+            LogSpaceSchedule(0, wait=0, start=-4, stop=-3, n_between_scales=8), 
+            LogSpaceSchedule(10, wait=20, start=-3, stop=-4, n_between_scales=8),
+            LogSpaceSchedule(40, wait=0, start=-4, stop=-3, n_between_scales=18),
+            LogSpaceSchedule(60, wait=20, start=-3, stop=-4, n_between_scales=18),
+            LogSpaceSchedule(100, wait=0, start=-4, stop=-3, n_between_scales=18),
+            LogSpaceSchedule(120, wait=20, start=-3, stop=-4, n_between_scales=18),
+            LogSpaceSchedule(160, wait=50, start=-4, stop=-5, n_between_scales=48),
+        ]
+    )

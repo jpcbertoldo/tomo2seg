@@ -131,18 +131,18 @@ dmypy.json
 
 
 data/*
+!data/.gitignore
+
 !data/models
-data/models/*.hdf5
 data/models/*
-!data/models/unet*/
-data/models/unet*/*
-!data/models/unet*/*.yml
-!data/models/unet*/*.png
-!data/models/unet*/logger.csv
-!data/models/unet*/history.csv
-!data/models/unet*/*.txt
+!data/models/.gitignore
+
 
 .idea/
 nbs/.archive/
+nbs/archive/
 nbs/tutorials/
+nbs/cuda/
+nbs/cuda
 
+*.h5

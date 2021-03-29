@@ -6,26 +6,38 @@ todo make this all with keras backend
 
 # Standard packages
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, InitVar, replace
+from copy import deepcopy
+from dataclasses import dataclass, field, InitVar
 from enum import Enum
 from functools import partial
-from itertools import combinations, product
+from itertools import product
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Callable, Type, Union, ClassVar
-from copy import deepcopy
+import warnings
 
 # Installed packages
 import numpy as np
+import scipy as sp
 from numpy import ndarray
 from numpy.random import RandomState
-import scipy as sp
-from scipy.interpolate import RegularGridInterpolator, griddata
+from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import map_coordinates
-import sklearn as skl
-import sklearn.preprocessing
 from tensorflow.keras.utils import Sequence
 
 from tomo2seg.logger import logger
+from tomo2seg.data import NORMALIZE_FACTORS
+
+
+def __get_attr__(name):
+    
+    if name == "NORMALIZE_FACTORS":
+        warnings.warn(f"Please use the version in the module `data.py`.", DeprecationWarning)
+        return {
+            "uint8": 255,
+            "uint16": 65535,
+        }
+    
+    raise AttributeError(f"Module `{__name__}` does not have attribute `{name}`.")
 
 
 class GT2D(Enum):
@@ -384,6 +396,7 @@ class ET:
 
 @dataclass
 class GridPositionGenerator(ABC):
+    
     x_range: Tuple[int, int]
     y_range: Tuple[int, int]
     z_range: Tuple[int, int]
@@ -391,6 +404,12 @@ class GridPositionGenerator(ABC):
     def __post_init__(self):
         for axis, axis_range in zip(range(3), self.axes_ranges):
             assert axis_range[0] <= axis_range[1], f"{axis=} {axis_range=}"
+        
+        import functools
+        import operator
+        import humanize
+        npositions = functools.reduce(operator.mul, self.axes_range_sizes)
+        logger.debug(f"{self.__class__.__name__} ==> {npositions=} ({humanize.intcomma(npositions)})")
 
     @property
     def axes_ranges(self) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
@@ -773,6 +792,56 @@ class GTUniformEverywhere(ProbabilityField3D):
 
 
 @dataclass
+class GTUniformEverywhere2(ProbabilityField3D):
+    
+    gt_type: Type = GT3D  # GT2D or GT3D
+    gt_name_list: List[str] = field(default_factory=lambda: []) # the names
+        
+    def __post_init__(self, *args, **kwargs):
+        # noinspection PyArgumentList
+        super().__post_init__(*args, **kwargs)
+        
+        for gt_name in self.gt_name_list:
+            self.gt_type[gt_name]
+        
+        logger.debug(f"{len(self.gt_name_list)=}")
+ 
+    def _concrete_getitem(self, x: int, y: int, z: int):
+        """
+        todo make this batch-enabled
+        """
+        
+        gt_name = self.random_state.choice(self.gt_name_list, 1, replace=False)[0]
+        return self.gt_type[gt_name]
+    
+    def build_all(cls, gt_type: Type, *args, **kwargs):
+        return cls(
+            *args,
+            gt_type=gt_type,
+            gt_name_list=[
+                s.lstrip(f"{gt_type.__name__}.") 
+                for s in map(str, gt_type)
+            ],
+            **kwargs,
+        )
+    
+    def gt_no_transpose_rot(cls, gt_type: Type, *args, **kwargs):
+        return cls(
+            *args,
+            gt_type=gt_type,
+            gt_name_list=[
+                s.lstrip(f"{gt_type.__name__}.") 
+                for s in map(str, gt_type)
+                # todo improve this to make sure the end shape is the same
+                if "transpose" not in s
+                and not ("rot" in s and "90" in s)
+            ],
+            **kwargs,
+        )
+
+
+    
+@dataclass
 class VSConstantEverywhere(ProbabilityField3D):
     """Values shift is always the same everywhere."""
 
@@ -1024,7 +1093,15 @@ class MetaCrop3D:
         return any(self.is2d_on(axis_idx) for axis_idx in range(3))
 
     def to_csv_line(self) -> str:
+        # todo fix this to use ; or generalize it
         return f"{self.x},{self.y},{self.z},{repr(self.et)},{self.gt.__class__.__name__},{self.gt.name},{self.vs},{self.is_2halfd}"
+    
+    @classmethod
+    def from_csv_line(cls, line: str) -> "MetaCrop3D":
+        pieces = line.split(";")
+#         return cls(
+#             x=
+#         )
 
 
 def _labels_single2multi_channel(im: ndarray, labels: List[int]) -> np.ndarray:
@@ -1221,6 +1298,192 @@ class MetaCrop3DGenerator:
             )
             for x, y, z in x0y0z0_array
         ]
+    
+    @classmethod
+    def build_setup_train00(
+        cls, 
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+        data_original_dtype: str = "uint8",
+    ):
+
+        try:
+            normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
+
+        except KeyError:
+            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=GTUniformEverywhere(
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSUniformEverywhere.build_plus_or_mines(
+                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
+                grid_position_generator=grid_pos_gen,
+                random_state=RandomState(common_random_state_seed),
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_train01(
+        cls, 
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+        data_original_dtype: str = "uint8",
+        gt_no_transpose_rot: bool = False,
+    ):
+        """just like build_setup_train00 with an adaptation to use GTUniformEverywhere2"""
+
+        try:
+            normalize_factor = NORMALIZE_FACTORS[data_original_dtype]
+
+        except KeyError:
+            raise ValueError(f"Unknown {data_original_dtype=} in {NORMALIZE_FACTORS.keys()=}")
+
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=gt_build_func(
+                GTUniformEverywhere2,
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSUniformEverywhere.build_plus_or_mines(
+                shift=1. / normalize_factor / 2,  # half a value to both sides +/-
+                grid_position_generator=grid_pos_gen,
+                random_state=RandomState(common_random_state_seed),
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_crack_train00(
+        cls, 
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+        data_original_dtype: str = "uint8",
+        gt_no_transpose_rot: bool = False,
+    ):
+        """just like build_setup_train00 with an adaptation to use GTUniformEverywhere2 and no VS"""
+
+        grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+            volume_shape=volume_shape, 
+            crop_shape=crop_shape,
+            random_state=RandomState(common_random_state_seed),
+        )
+        
+        gt_build_func = GTUniformEverywhere2.gt_no_transpose_rot if gt_no_transpose_rot else GTUniformEverywhere2.build_all
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            
+            x0y0z0_generator=grid_pos_gen,
+            
+            # it is too slow to use this
+            et_field=ET3DConstantEverywhere.build_no_displacement(
+                grid_position_generator=grid_pos_gen
+            ),
+            
+            gt_field=gt_build_func(
+                GTUniformEverywhere2,
+                gt_type=gt_type,
+                random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            vs_field=VSConstantEverywhere.build_no_shift(
+#                 random_state=RandomState(common_random_state_seed),
+                grid_position_generator=grid_pos_gen,
+            ),
+            
+            is_2halfd=is_2halfd,
+        )
+    
+    @classmethod
+    def build_setup_val00(cls, *args, **kwargs):
+        """this is here just for back compatibility"""
+        return cls.build_no_augmentation(*args, **kwargs)
+    
+    @classmethod
+    def build_no_augmentation(
+        cls, 
+        grid_pos_gen: Optional[GridPositionGenerator],
+        volume_shape: Tuple[int, int, int], 
+        crop_shape: Tuple[int, int, int], 
+        common_random_state_seed: int,
+        gt_type: Type,
+        is_2halfd: bool,
+    ):
+        if grid_pos_gen is None:
+            grid_pos_gen = UniformGridPosition.build_from_volume_crop_shapes(
+                volume_shape=volume_shape, 
+                crop_shape=crop_shape,
+                random_state=RandomState(common_random_state_seed),
+            )
+        
+        return cls(
+            volume_shape=volume_shape,
+            crop_shape=crop_shape,
+            x0y0z0_generator=grid_pos_gen,
+            et_field=ET3DConstantEverywhere.build_no_displacement(grid_position_generator=grid_pos_gen),
+            gt_field=(
+                GTConstantEverywhere.build_gt3d_identity(grid_position_generator=grid_pos_gen) if gt_type == GT3D else
+                GTConstantEverywhere.build_gt2d_identity(grid_position_generator=grid_pos_gen) 
+            ),
+            vs_field=VSConstantEverywhere.build_no_shift(grid_position_generator=grid_pos_gen),
+            is_2halfd=is_2halfd,
+        )
+        
 
 
 @dataclass
@@ -1336,7 +1599,7 @@ class VolumeCropSequence(Sequence):
             with self.meta_crops_hist_path.open(mode='a') as f:
                 for batch_idx, batch in enumerate(self.meta_crops_hist_buffer):
                     for crop_meta in batch:
-                        f.write(f"{batch_idx},{crop_meta.to_csv_line()}")
+                        f.write(f"\n{batch_idx},{crop_meta.to_csv_line()}")
         self.meta_crops_hist_buffer = []
 
     def __len__(self):

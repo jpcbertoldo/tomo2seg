@@ -5,7 +5,6 @@ import requests
 
 from tomo2seg.logger import logger
 
-
 # should contain the webhook_url
 SLACK_JSON = "/home/users/jcasagrande/projects/tomo2seg/data/slack.json"
 
@@ -65,6 +64,12 @@ def notify_finished():
 def notify_error():
     logger.error("Sending notification error during the training!")
     notify("A problem occurred during the training.")
+
+
+def notify_exception(exception: Exception, hostname: str = None):
+    hostname = "unknown host" if hostname is None else hostname
+    logger.exception(f"{exception.__class__.__name__} occurred. ")
+    notify(f"{exception.__class__.__name__}: {str(exception)}. {hostname=}")
 
 
 if __name__ == "__main__":

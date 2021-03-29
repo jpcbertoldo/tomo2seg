@@ -40,10 +40,35 @@ class History(KerasHistory):
 
         self.backup = backup
         self.csv_path = csv_path
+        
         self.optimizer = optimizer
         self.crop_seq_train = crop_seq_train
         self.crop_seq_val = crop_seq_val
+        
         self.last_log_timestamp = None
+        
+        if self.csv_path is not None:
+            logger.info(f"Loading history from csv {self.csv_path=}.")
+            try:
+                history_df = pandas.read_csv(self.csv_path)
+                self.history = history_df.to_dict(orient="list")
+                
+                from ast import literal_eval
+                self.history["train.crop_shape"] = [
+                    literal_eval(x) if isinstance(x, str) else x
+                    for x in self.history["train.crop_shape"]
+                ]
+
+                self.history["val.crop_shape"] = [
+                    literal_eval(x) if isinstance(x, str) else x
+                    for x in self.history["val.crop_shape"]
+                ]
+
+            except FileNotFoundError:
+                logger.debug("History hasn't been saved yet.")
+
+            except pandas.errors.EmptyDataError:
+                logger.debug("History hasn't been saved yet.")
 
     @property
     def last_epoch(self) -> int:
