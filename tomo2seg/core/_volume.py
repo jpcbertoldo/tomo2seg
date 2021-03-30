@@ -227,6 +227,7 @@ class Volume:
     def raw(self) -> Path:
         return self.dir / f"{self.name}.raw"
 
+    # todo transform these to plot the slices with the new slice display
     def xslice(self, x: int) -> ndarray:
         return self.array[x, :, :]
 
